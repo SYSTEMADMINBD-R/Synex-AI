@@ -2,10 +2,11 @@
 // Convex actions.
 //
 // Provider routing:
-//   - General mode runs on OpenAI  (OPENAI_API_KEY, model OPENAI_MODEL)
-//   - Hacking mode runs on Groq    (GROQ_API_KEYS / GROQ_API_KEY, model GROQ_MODEL)
+//   - General mode runs on Gemini (GEMINI_API_KEY, model GEMINI_MODEL)
+//   - Hacking mode runs on Groq   (GROQ_API_KEYS / GROQ_API_KEY, model GROQ_MODEL)
 //
-// Groq's API is OpenAI-compatible, so both providers share the OpenAI SDK.
+// Both Groq's and Gemini's APIs are OpenAI-compatible, so all providers share
+// the OpenAI SDK.
 // Multiple Groq keys are supported: list them comma-separated in
 // GROQ_API_KEYS ("key1,key2,key3"). Keys are rotated round-robin across
 // requests, and if a key is rate-limited (429) or the provider errors, the
@@ -14,7 +15,8 @@
 import OpenAI, { APIError } from "openai";
 import { MODES, type Mode } from "./schema";
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 const MAX_TOKENS = 2000;
@@ -91,17 +93,17 @@ function isRetryableError(error: unknown): boolean {
 
 /* ---------------- Generators ---------------- */
 
-async function generateOpenAI(
+async function generateGemini(
   systemPrompt: string,
   history: ChatMessage[],
 ): Promise<CompletionResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { ok: false, error: "missing-key" };
-  const client = getClient(apiKey);
+  const client = getClient(apiKey, GEMINI_BASE_URL);
 
   try {
     const completion = await client.chat.completions.create({
-      model: OPENAI_MODEL,
+      model: GEMINI_MODEL,
       max_tokens: MAX_TOKENS,
       messages: [{ role: "system", content: systemPrompt }, ...history],
     });
@@ -109,7 +111,7 @@ async function generateOpenAI(
     if (!content) return { ok: false, error: "model" };
     return { ok: true, content };
   } catch (error) {
-    console.error("[TwinMind] OpenAI request failed:", error);
+    console.error("[TwinMind] Gemini request failed:", error);
     return { ok: false, error: "network" };
   }
 }
@@ -159,5 +161,5 @@ export async function generateChatCompletion(
   const systemPrompt = systemPromptFor(mode);
   return mode === MODES.HACKING
     ? generateGroq(systemPrompt, history)
-    : generateOpenAI(systemPrompt, history);
+    : generateGemini(systemPrompt, history);
 }

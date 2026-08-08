@@ -1,5 +1,5 @@
 // TwinMind chat backend: conversations + messages, and the sendMessage action
-// that calls OpenAI through the configured mode persona.
+// that calls the configured provider through the selected mode persona.
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
@@ -147,7 +147,7 @@ export const deleteConversation = mutation({
 /** Friendly in-chat notice shown when the provider key(s) are not configured. */
 const SETUP_NOTICE = `Heads up — I can't reach my brain right now. The app is missing an **AI API key**.
 
-- **General mode** needs an **OpenAI API key** (\`OPENAI_API_KEY\`).
+- **General mode** needs a **Gemini API key** (\`GEMINI_API_KEY\`).
 - **Hacking mode** needs a **Groq API key** (\`GROQ_API_KEY\`, or several comma-separated in \`GROQ_API_KEYS\`).
 
 Add them in your project's **Keys/API keys** settings, and I'll be ready to answer anything in both modes.`;

@@ -144,10 +144,13 @@ export const deleteConversation = mutation({
   },
 });
 
-/** Friendly in-chat notice shown when OPENAI_API_KEY is not configured. */
-const SETUP_NOTICE = `Heads up — I can't reach my brain right now. The app is missing an **OpenAI API key**.
+/** Friendly in-chat notice shown when the provider key(s) are not configured. */
+const SETUP_NOTICE = `Heads up — I can't reach my brain right now. The app is missing an **AI API key**.
 
-Add \`OPENAI_API_KEY\` in your project's **Keys/API keys** settings, and I'll be ready to answer anything in both modes.`;
+- **General mode** needs an **OpenAI API key** (\`OPENAI_API_KEY\`).
+- **Hacking mode** needs a **Groq API key** (\`GROQ_API_KEY\`, or several comma-separated in \`GROQ_API_KEYS\`).
+
+Add them in your project's **Keys/API keys** settings, and I'll be ready to answer anything in both modes.`;
 
 export const sendMessage = action({
   args: {

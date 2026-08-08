@@ -17,6 +17,7 @@
 // through a chain of known-good models until one responds.
 
 import OpenAI, { APIError } from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { MODES, type Mode } from "./schema";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
@@ -36,6 +37,9 @@ const GEMINI_MODEL_FALLBACKS = [
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
 /** If the configured Groq model is unavailable, fall back to this one. */
 const GROQ_MODEL_FALLBACK = "llama-3.3-70b-versatile";
+/** Vision-capable Groq model used when the user attaches images. The default
+ *  text model can't read images, so we switch automatically. */
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL ?? "llama-3.2-11b-vision-preview";
 
 /** Output token budget. Hacking mode gets a much larger cap so BREACH can give
  *  complete, deep walkthroughs without being cut off. Overridable via env. */
@@ -65,10 +69,52 @@ export function systemPromptFor(mode: Mode): string {
   return mode === MODES.HACKING ? HACKING_SYSTEM_PROMPT : GENERAL_SYSTEM_PROMPT;
 }
 
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | ChatContentPart[];
 };
+
+/** Convert our internal messages into the SDK's message shape. The system
+ *  prompt is always plain text; user messages may carry image parts. */
+function toSdkMessages(
+  systemPrompt: string,
+  history: ChatMessage[],
+): ChatCompletionMessageParam[] {
+  return [
+    { role: "system", content: systemPrompt },
+    ...history.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+  ] as ChatCompletionMessageParam[];
+}
+
+/** True if any message carries image parts (multimodal request). */
+function hasImageParts(messages: ChatMessage[]): boolean {
+  return messages.some(
+    (m) =>
+      Array.isArray(m.content) &&
+      m.content.some((part) => part.type === "image_url"),
+  );
+}
+
+/** Drop image parts so a text-only model can still answer. */
+function stripImages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((m) => {
+    if (!Array.isArray(m.content)) return m;
+    return {
+      ...m,
+      content: m.content
+        .filter((part) => part.type === "text")
+        .map((part) => (part as { text: string }).text)
+        .join("\n"),
+    };
+  });
+}
 
 type CompletionResult =
   | { ok: true; content: string }
@@ -140,14 +186,12 @@ async function generateGemini(
 ): Promise<CompletionResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { ok: false, error: "missing-key" };
-  const client = getClient(apiKey, GEMINI_BASE_URL);
-
-  for (const model of geminiModels()) {
+  const client = getClient(apiKey, GEMINI_BASE_URL);    for (const model of geminiModels()) {
     try {
       const completion = await client.chat.completions.create({
         model,
         max_tokens: GEMINI_MAX_TOKENS,
-        messages: [{ role: "system", content: systemPrompt }, ...history],
+        messages: toSdkMessages(systemPrompt, history),
       });
       const content = completion.choices[0]?.message?.content?.trim();
       if (!content) return { ok: false, error: "model" };
@@ -176,20 +220,27 @@ async function generateGroq(
 ): Promise<CompletionResult> {
   const keys = groqApiKeys();
   if (keys.length === 0) return { ok: false, error: "missing-key" };
-  const models = [GROQ_MODEL, GROQ_MODEL_FALLBACK].filter(
-    (m, i, arr) => arr.indexOf(m) === i,
-  );
+
+  const withImages = hasImageParts(history);
+  // With images: vision model first, then the text model (images stripped).
+  // Without images: just the text model chain.
+  const models = withImages
+    ? [GROQ_VISION_MODEL, GROQ_MODEL, GROQ_MODEL_FALLBACK]
+    : [GROQ_MODEL, GROQ_MODEL_FALLBACK];
+  const dedupedModels = models.filter((m, i, arr) => arr.indexOf(m) === i);
 
   let lastError: unknown = null;
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const apiKey = keys[(groqCursor + attempt) % keys.length];
     const client = getClient(apiKey, GROQ_BASE_URL);
-    for (const model of models) {
+    for (const model of dedupedModels) {
+      const isVision = model === GROQ_VISION_MODEL;
+      const payload = withImages && !isVision ? stripImages(history) : history;
       try {
         const completion = await client.chat.completions.create({
           model,
           max_tokens: GROQ_MAX_TOKENS,
-          messages: [{ role: "system", content: systemPrompt }, ...history],
+          messages: toSdkMessages(systemPrompt, payload),
         });
         const content = completion.choices[0]?.message?.content?.trim();
         if (!content) return { ok: false, error: "model" };

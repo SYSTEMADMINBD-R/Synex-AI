@@ -28,6 +28,16 @@ export const modeValidator = v.union(
 );
 export type Mode = Infer<typeof modeValidator>;
 
+// File/image attachment metadata stored on user messages.
+export const attachmentValidator = v.object({
+  storageId: v.string(),
+  name: v.string(),
+  type: v.string(),
+  size: v.number(),
+  url: v.string(),
+});
+export type Attachment = Infer<typeof attachmentValidator>;
+
 const schema = defineSchema(
   {
     // default auth tables using convex auth.
@@ -57,6 +67,8 @@ const schema = defineSchema(
       conversationId: v.id("conversations"),
       role: v.union(v.literal("user"), v.literal("assistant")),
       content: v.string(),
+      mode: modeValidator,
+      attachments: v.optional(v.array(attachmentValidator)),
       createdAt: v.number(),
     }).index("by_conversation", ["conversationId", "createdAt"]),
   },

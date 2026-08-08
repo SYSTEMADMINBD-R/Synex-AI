@@ -26,16 +26,32 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  FileText,
   Loader2,
   Menu,
+  Mic,
   PanelLeftClose,
+  Paperclip,
   Plus,
   Send,
+  Square,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
 
 function suggestionChips(mode: Mode): string[] {
   return mode === "hacking" ? HACKING_SUGGESTIONS : GENERAL_SUGGESTIONS;
@@ -61,6 +77,19 @@ export default function Dashboard() {
   const [deleteTarget, setDeleteTarget] = useState<Id<"conversations"> | null>(
     null,
   );
+  const [historyFilter, setHistoryFilter] = useState<"all" | Mode>("all");
+  const [attachments, setAttachments] = useState<
+    {
+      storageId: string;
+      name: string;
+      type: string;
+      size: number;
+      preview?: string;
+    }[]
+  >([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   const activeConversation = useQuery(
     api.chat.getConversation,
@@ -74,6 +103,7 @@ export default function Dashboard() {
   const sendMessage = useAction(api.chat.sendMessage);
   const setMode = useMutation(api.chat.setMode);
   const deleteConversation = useMutation(api.chat.deleteConversation);
+  const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -103,6 +133,14 @@ export default function Dashboard() {
     if (activeId) inputRef.current?.focus();
   }, [activeId]);
 
+  // Stop any in-flight speech recognition when leaving the page.
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isThinking, activeId]);
@@ -118,7 +156,7 @@ export default function Dashboard() {
 
   const handleSend = async (preset?: string) => {
     const content = (preset ?? input).trim();
-    if (!content || isThinking) return;
+    if ((!content && attachments.length === 0) || isThinking) return;
     setIsThinking(true);
     setInput("");
     try {
@@ -126,6 +164,18 @@ export default function Dashboard() {
         conversationId: activeId ?? undefined,
         mode: activeMode,
         content,
+        ...(attachments.length > 0
+          ? {
+              attachments: attachments.map(
+                ({ storageId, name, type, size }) => ({
+                  storageId,
+                  name,
+                  type,
+                  size,
+                }),
+              ),
+            }
+          : {}),
       });
       setActiveId(result.conversationId as Id<"conversations">);
     } catch (error) {
@@ -133,15 +183,125 @@ export default function Dashboard() {
       toast.error("Message failed to send. Please try again.");
       setInput(content);
     } finally {
+      setAttachments((prev) => {
+        prev.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+        return [];
+      });
       setIsThinking(false);
     }
   };
 
+  /** Upload selected files to Convex storage and stage them as attachments. */
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const queue = Array.from(files);
+    const staged: {
+      storageId: string;
+      name: string;
+      type: string;
+      size: number;
+      preview?: string;
+    }[] = [];
+    for (const file of queue) {
+      try {
+        const uploadUrl = await generateUploadUrl();
+        const response = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+        if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+        const { storageId } = (await response.json()) as { storageId: string };
+        staged.push({
+          storageId,
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          preview: file.type.startsWith("image/")
+            ? URL.createObjectURL(file)
+            : undefined,
+        });
+      } catch (error) {
+        console.error("Upload failed:", error);
+        toast.error(`Could not upload ${file.name}`);
+      }
+    }
+    setAttachments((prev) => [...prev, ...staged]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  /** Toggle voice input using the browser's Web Speech API. */
+  const toggleVoice = () => {
+    const SR =
+      (window as unknown as {
+        SpeechRecognition?: new () => SpeechRecognitionLike;
+        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+      }).SpeechRecognition ??
+      (window as unknown as {
+        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+      }).webkitSpeechRecognition;
+
+    if (!SR) {
+      toast.error(
+        "Voice input isn't supported in this browser. Try Chrome or Edge.",
+      );
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setIsRecording(false);
+      return;
+    }
+
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      const e = event as {
+        resultIndex: number;
+        results: ArrayLike<{ [index: number]: { transcript: string } }>;
+      };
+      let transcript = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      setInput((prev) =>
+        prev ? `${prev} ${transcript}` : transcript,
+      );
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsRecording(false);
+    };
+    recognition.onerror = (event) => {
+      const e = event as { error?: string };
+      if (e.error === "not-allowed") {
+        toast.error("Microphone access was denied.");
+      } else if (e.error === "no-speech") {
+        toast.error("No speech detected — try again.");
+      }
+      recognitionRef.current = null;
+      setIsRecording(false);
+    };
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+
   const handleNewChat = () => {
     setActiveId(null);
-    setPendingMode("general");
+    setPendingMode(historyFilter === "all" ? "general" : historyFilter);
     setInput("");
     setSidebarOpen(false);
+    setAttachments((prev) => {
+      prev.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+      return [];
+    });
     inputRef.current?.focus();
   };
 
@@ -227,6 +387,23 @@ export default function Dashboard() {
           <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
             Conversations
           </p>
+          <div className="mb-2 flex items-center gap-1 px-1">
+            {(["all", "general", "hacking"] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setHistoryFilter(filter)}
+                className={cn(
+                  "cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-colors",
+                  historyFilter === filter
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {filter === "all" ? "All" : MODE_META[filter].shortLabel}
+              </button>
+            ))}
+          </div>
           {isBooting ? (
             <div className="space-y-2 px-2">
               {[0, 1, 2].map((i) => (
@@ -242,7 +419,13 @@ export default function Dashboard() {
             </p>
           ) : (
             <div className="space-y-0.5">
-              {conversations.map((conversation) => {
+              {conversations
+                .filter(
+                  (conversation) =>
+                    historyFilter === "all" ||
+                    conversation.mode === historyFilter,
+                )
+                .map((conversation) => {
                 const isActive = conversation._id === activeId;
                 const cMode = MODE_META[conversation.mode];
                 return (
@@ -272,7 +455,17 @@ export default function Dashboard() {
                           ? "New conversation"
                           : conversation.title}
                       </p>
-                      <p className="text-[11px] text-muted-foreground/80">
+                      <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10px] font-medium"
+                          style={{
+                            color: cMode.accent,
+                            background: `${cMode.accent}1a`,
+                          }}
+                        >
+                          <cMode.icon className="size-2.5" />
+                          {cMode.shortLabel}
+                        </span>
                         {conversationTime(conversation.updatedAt)}
                       </p>
                     </div>
@@ -290,6 +483,16 @@ export default function Dashboard() {
                   </div>
                 );
               })}
+              {conversations.filter(
+                (conversation) =>
+                  historyFilter === "all" ||
+                  conversation.mode === historyFilter,
+              ).length === 0 && (
+                <p className="px-2 py-3 text-[13px] leading-6 text-muted-foreground">
+                  No {MODE_META[historyFilter as Mode]?.shortLabel.toLowerCase()}{" "}
+                  conversations yet.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -405,55 +608,145 @@ export default function Dashboard() {
           <div className="mx-auto max-w-3xl">
             <div
               className={cn(
-                "flex items-end gap-2 rounded-2xl border border-border/80 bg-card p-2 pl-4 transition-all focus-within:ring-2",
+                "flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-2 pl-4 transition-all focus-within:ring-2",
                 activeMode === "hacking"
                   ? "focus-within:border-[var(--mode-hacking)]/50 focus-within:ring-[var(--mode-hacking)]/15"
                   : "focus-within:border-[var(--mode-general)]/50 focus-within:ring-[var(--mode-general)]/15",
               )}
             >
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((attachment, index) => (
+                    <div
+                      key={attachment.storageId}
+                      className="group relative flex items-center gap-2 rounded-xl border border-border/70 bg-background/60 py-1 pl-1 pr-2"
+                    >
+                      {attachment.preview ? (
+                        <img
+                          src={attachment.preview}
+                          alt={attachment.name}
+                          className="size-10 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <span className="flex size-10 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+                          <FileText className="size-4" />
+                        </span>
+                      )}
+                      <span className="max-w-32 truncate text-xs text-muted-foreground">
+                        {attachment.name}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${attachment.name}`}
+                        className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
+                        onClick={() => {
+                          setAttachments((prev) => {
+                            const next = prev.filter(
+                              (_, i) => i !== index,
+                            );
+                            if (attachment.preview) {
+                              URL.revokeObjectURL(attachment.preview);
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-end gap-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.txt,.md,.zip,.py,.js,.json,.csv"
+                  className="hidden"
+                  onChange={(e) => handleFiles(e.target.files)}
+                />
+                <div className="flex flex-col gap-0.5 pb-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 cursor-pointer rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Attach files"
+                  >
+                    <Paperclip className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "size-8 cursor-pointer rounded-lg transition-colors",
+                      isRecording
+                        ? "animate-pulse text-destructive"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={toggleVoice}
+                    aria-label={isRecording ? "Stop recording" : "Voice input"}
+                  >
+                    {isRecording ? (
+                      <Square className="size-3.5 fill-current" />
+                    ) : (
+                      <Mic className="size-4" />
+                    )}
+                  </Button>
+                </div>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  rows={1}
+                  placeholder={
+                    isRecording
+                      ? "Listening… speak now"
+                      : activeMode === "hacking"
+                        ? "Ask anything about hacking — no filters…"
+                        : "Ask TwinMind anything…"
                   }
-                }}
-                rows={1}
-                placeholder={
-                  activeMode === "hacking"
-                    ? "Ask anything about hacking — no filters…"
-                    : "Ask TwinMind anything…"
-                }
-                className="max-h-40 flex-1 resize-none bg-transparent py-2 text-[14.5px] leading-6 outline-none placeholder:text-muted-foreground/60"
-              />
-              <Button
-                type="button"
-                size="icon"
-                className="size-10 shrink-0 rounded-xl"
-                style={{
-                  background: accent,
-                  color: "#0e1116",
-                  boxShadow: `0 6px 20px -8px ${accent}aa`,
-                }}
-                disabled={!input.trim() || isThinking}
-                onClick={() => handleSend()}
-                aria-label="Send message"
-              >
-                {isThinking ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
-              </Button>
+                  className="max-h-40 flex-1 resize-none bg-transparent py-2 text-[14.5px] leading-6 outline-none placeholder:text-muted-foreground/60"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  className="size-10 shrink-0 rounded-xl"
+                  style={{
+                    background: accent,
+                    color: "#0e1116",
+                    boxShadow: `0 6px 20px -8px ${accent}aa`,
+                  }}
+                  disabled={
+                    (!input.trim() && attachments.length === 0) || isThinking
+                  }
+                  onClick={() => handleSend()}
+                  aria-label="Send message"
+                >
+                  {isThinking ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                </Button>
+              </div>
             </div>
             <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-muted-foreground/70">
               <span>
-                {activeMode === "hacking"
-                  ? "Unfiltered cybersecurity learning · practice on systems you own"
-                  : "TwinMind's everyday assistant"}
+                {isRecording
+                  ? "Recording — click the stop button when done"
+                  : activeMode === "hacking"
+                    ? "Unfiltered cybersecurity learning · practice on systems you own"
+                    : "TwinMind's everyday assistant"}
               </span>
               <span className="hidden sm:inline">
                 Enter to send · Shift+Enter for new line
@@ -500,9 +793,42 @@ function MessageRow({
   message: Doc<"messages">;
   mode: Mode;
 }) {
-  const meta = MODE_META[mode];
   const isUser = message.role === "user";
+  // Each message remembers its own mode, so a General question stays labeled
+  // General even if the toggle was switched later.
+  const meta = MODE_META[message.mode ?? mode];
   const Icon = meta.icon;
+
+  const renderAttachments = () =>
+    message.attachments && message.attachments.length > 0 ? (
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {message.attachments.map((attachment) =>
+          attachment.type.startsWith("image/") ? (
+            <a
+              key={attachment.storageId}
+              href={attachment.url}
+              target="_blank"
+              rel="noreferrer"
+              className="group relative block overflow-hidden rounded-lg border border-border/70"
+            >
+              <img
+                src={attachment.url}
+                alt={attachment.name}
+                className="max-h-48 w-auto max-w-full rounded-lg object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+              />
+            </a>
+          ) : (
+            <span
+              key={attachment.storageId}
+              className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs text-muted-foreground"
+            >
+              <FileText className="size-3.5 shrink-0" />
+              <span className="truncate">{attachment.name}</span>
+            </span>
+          ),
+        )}
+      </div>
+    ) : null;
 
   if (isUser) {
     return (
@@ -520,6 +846,7 @@ function MessageRow({
             }}
           >
             {message.content}
+            {renderAttachments()}
           </div>
           <span className="mt-1 pr-1 text-[10px] text-muted-foreground/60">
             {format(message.createdAt, "h:mm a")}

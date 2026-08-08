@@ -88,10 +88,9 @@ export const touchConversation = mutation({
   args: {
     conversationId: v.id("conversations"),
     title: v.optional(v.string()),
-    mode: v.optional(modeValidator),
     updatedAt: v.optional(v.number()),
   },
-  handler: async (ctx, { conversationId, title, mode, updatedAt }) => {
+  handler: async (ctx, { conversationId, title, updatedAt }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Not authenticated");
     const conversation = await ctx.db.get(conversationId);
@@ -100,7 +99,6 @@ export const touchConversation = mutation({
     }
     await ctx.db.patch(conversationId, {
       ...(title !== undefined ? { title } : {}),
-      ...(mode !== undefined ? { mode } : {}),
       ...(updatedAt !== undefined ? { updatedAt } : {}),
     });
   },
@@ -139,6 +137,34 @@ export const insertMessage = mutation({
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
       createdAt: Date.now(),
     });
+  },
+});
+
+/** One-off repair for legacy data: conversations are locked to the mode they
+ *  were created in (the first message's mode). The old mode-toggle used to
+ *  re-label conversations, so some existing rows disagree with their own
+ *  messages. This syncs every conversation back to its first message's mode.
+ *  Idempotent — safe to re-run. */
+export const repairConversationModes = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const conversations = await ctx.db.query("conversations").collect();
+    let fixed = 0;
+    for (const conversation of conversations) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", conversation._id),
+        )
+        .order("asc")
+        .collect();
+      const firstMode = messages[0]?.mode;
+      if (firstMode && firstMode !== conversation.mode) {
+        await ctx.db.patch(conversation._id, { mode: firstMode });
+        fixed += 1;
+      }
+    }
+    return { fixed };
   },
 });
 
@@ -264,7 +290,6 @@ export const sendMessage = action({
     await ctx.runMutation(api.chat.touchConversation, {
       conversationId,
       title,
-      mode: args.mode,
       updatedAt: Date.now(),
     });
 

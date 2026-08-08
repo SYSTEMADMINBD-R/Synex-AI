@@ -84,19 +84,6 @@ export const createConversation = mutation({
   },
 });
 
-export const setMode = mutation({
-  args: { conversationId: v.id("conversations"), mode: modeValidator },
-  handler: async (ctx, { conversationId, mode }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Not authenticated");
-    const conversation = await ctx.db.get(conversationId);
-    if (!conversation || conversation.userId !== userId) {
-      throw new Error("Conversation not found");
-    }
-    await ctx.db.patch(conversationId, { mode });
-  },
-});
-
 export const touchConversation = mutation({
   args: {
     conversationId: v.id("conversations"),

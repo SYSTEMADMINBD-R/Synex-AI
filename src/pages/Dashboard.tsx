@@ -101,7 +101,6 @@ export default function Dashboard() {
   );
 
   const sendMessage = useAction(api.chat.sendMessage);
-  const setMode = useMutation(api.chat.setMode);
   const deleteConversation = useMutation(api.chat.deleteConversation);
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
 
@@ -147,10 +146,18 @@ export default function Dashboard() {
 
   const handleModeChange = (mode: Mode) => {
     setPendingMode(mode);
+    // A conversation is locked to the mode it was created in. Switching minds
+    // mid-conversation starts a fresh chat in the new mode instead of
+    // re-labeling the existing one, so General and Hacking histories never
+    // bleed into each other.
     if (activeConversation && mode !== activeConversation.mode) {
-      setMode({ conversationId: activeConversation._id, mode }).catch((e) => {
-        console.error("Mode switch failed:", e);
+      setActiveId(null);
+      setInput("");
+      setAttachments((prev) => {
+        prev.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+        return [];
       });
+      inputRef.current?.focus();
     }
   };
 
@@ -337,7 +344,9 @@ export default function Dashboard() {
   const avatarLetter = (displayName[0] ?? "?").toUpperCase();
   const isBooting = conversations === undefined;
   const showEmptyState =
-    !isBooting && messages !== undefined && (messages ?? []).length === 0;
+    !isBooting &&
+    (activeId === null ||
+      (messages !== undefined && (messages ?? []).length === 0));
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">

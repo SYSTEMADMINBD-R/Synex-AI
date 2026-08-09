@@ -529,6 +529,10 @@ export default function Dashboard() {
               Sign out
             </Button>
           </div>
+          <p className="mt-2 px-2 text-center text-[10.5px] tracking-wide text-muted-foreground/60">
+            Made &amp; developed by{" "}
+            <span className="font-semibold text-foreground/75">RAGIB</span>
+          </p>
         </div>
       </aside>
 

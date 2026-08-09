@@ -481,12 +481,53 @@ export default function Landing() {
         </section>
       </main>
 
+      {/* ---------- Creator ---------- */}
+      <section className="border-t border-border/50 bg-card/30 py-16">
+        <div className="mx-auto max-w-6xl px-5">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6 }}
+            className="relative overflow-hidden rounded-3xl border border-border/70 bg-card px-8 py-12 text-center sm:px-16"
+          >
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(30rem 14rem at 50% -60%, rgba(52,211,153,0.16), transparent 70%), radial-gradient(26rem 12rem at 15% 130%, rgba(56,189,248,0.12), transparent 70%)",
+              }}
+            />
+            <div className="relative">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34d399] to-[#38bdf8] shadow-[0_10px_28px_-10px_rgba(52,211,153,0.7)]">
+                <Code2 className="size-5 text-background" strokeWidth={2.2} />
+              </div>
+              <p className="mt-6 text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">
+                The mind behind the minds
+              </p>
+              <h2 className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
+                Made and developed by{" "}
+                <span className="bg-gradient-to-r from-[#34d399] via-[#4ade80] to-[#38bdf8] bg-clip-text text-transparent">
+                  RAGIB
+                </span>
+              </h2>
+              <p className="mx-auto mt-3 max-w-md text-[14px] leading-7 text-muted-foreground">
+                Owner &amp; developer of TwinMind. If you ever ask either mind
+                who built it, they'll tell you the same name.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* ---------- Footer ---------- */}
       <footer className="border-t border-border/50 py-10">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 sm:flex-row">
           <Logo size={26} />
           <p className="text-xs text-muted-foreground/70">
-            © {new Date().getFullYear()} TwinMind · Built on{" "}
+            © {new Date().getFullYear()} TwinMind · Made and developed by{" "}
+            <span className="font-semibold text-foreground/80">RAGIB</span> ·{" "}
             <a
               href="https://freebuff.com"
               target="_blank"

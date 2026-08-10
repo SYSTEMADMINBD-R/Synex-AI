@@ -39,7 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 type SpeechRecognitionLike = {
@@ -377,7 +377,9 @@ export default function Dashboard() {
         )}
       >
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
-          <Logo size={32} />
+          <Link to="/" aria-label="Go to TwinMind home">
+            <Logo size={32} />
+          </Link>
           <Button
             type="button"
             variant="ghost"

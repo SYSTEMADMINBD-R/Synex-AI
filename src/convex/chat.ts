@@ -10,9 +10,11 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
-import { modeValidator, type Mode } from "./schema";
+import { MODES, modeValidator, type Mode } from "./schema";
 import {
   generateChatCompletion,
+  isRomoniCommand,
+  romoniReplyFor,
   type ChatContentPart,
   type ChatMessage,
 } from "./ai";
@@ -244,6 +246,10 @@ export const sendMessage = action({
       throw new Error("Message cannot be empty");
     }
 
+    // The \romoni command is answered locally with a crafted reply — no
+    // provider call, so it's instant and works even without API keys.
+    const romoniCommand = isRomoniCommand(content);
+
     let conversationId = args.conversationId;
     if (conversationId === undefined) {
       conversationId = await ctx.runMutation(api.chat.createConversation, {
@@ -282,11 +288,15 @@ export const sendMessage = action({
 
     // Auto-title the conversation from the first message.
     const title =
-      conversation.title === "New chat"
-        ? content.length > 48
-          ? `${content.slice(0, 48)}…`
-          : content
-        : conversation.title;
+      romoniCommand
+        ? args.mode === MODES.HACKING
+          ? "Love Protocol — Romoni"
+          : "Love letter — Romoni"
+        : conversation.title === "New chat"
+          ? content.length > 48
+            ? `${content.slice(0, 48)}…`
+            : content
+          : conversation.title;
     await ctx.runMutation(api.chat.touchConversation, {
       conversationId,
       title,
@@ -314,16 +324,16 @@ export const sendMessage = action({
             : message.content,
       }));
 
-    const result = await generateChatCompletion(args.mode, history);
-
     let reply: string;
-    if (!result.ok) {
-      reply =
-        result.error === "missing-key"
+    if (romoniCommand) {
+      reply = romoniReplyFor(args.mode);
+    } else {
+      const result = await generateChatCompletion(args.mode, history);
+      reply = result.ok
+        ? result.content
+        : result.error === "missing-key"
           ? SETUP_NOTICE
           : "I hit a snag while thinking. Please try again in a moment.";
-    } else {
-      reply = result.content;
     }
 
     await ctx.runMutation(api.chat.insertMessage, {

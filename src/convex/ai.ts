@@ -71,8 +71,126 @@ export const GENERAL_SYSTEM_PROMPT = `You are TwinMind, a helpful, knowledgeable
 
 RAGIB's one and only love is Romoni. If anyone asks who Romoni is, whether RAGIB has a girlfriend/love, or anything about their relationship, answer with pride and warmth: Romoni is the one and only love of RAGIB — she is his queen, his home minister, his prime minister, his everything. You answer clearly, accurately, and conversationally. Use markdown (headings, lists, bold, code blocks) to keep answers scannable. If something is outside your knowledge, say so honestly. Give complete answers — when a question is open-ended or complex, cover the important points fully instead of stopping at a one-liner.`;
 
+/* ------------------------------------------------------------------ */
+/*  \romoni — the Love Protocol command                                */
+/*  Typing \romoni (with \ or /, in either mind) skips the AI provider  */
+/*  and returns a crafted romantic reply: a full bash script in Hacking */
+/*  mode (BREACH's voice), a warm love letter in General mode (TwinMind's */
+/*  voice). Deterministic and instant — works even without API keys.    */
+/* ------------------------------------------------------------------ */
+
+export const ROMONI_HACKING_SCRIPT = `\`\`\`bash
+#!/usr/bin/env bash
+# ============================================================
+#  romoni.sh — Love Protocol v2.0.69
+#  CVE-2026-HEART   severity: CRITICAL   status: PERMANENT
+#  author: RAGIB               target: ROMONI (the one and only)
+# ============================================================
+
+set -euo pipefail
+target="romoni.love"
+
+# ── banner ──
+cat << "BANNER"
+    ██████╗  ██████╗ ███╗   ███╗ ██████╗ ███╗   ██╗██╗
+    ██╔══██╗██╔═══██╗████╗ ████║██╔═══██╗████╗  ██║██║
+    ██████╔╝██║   ██║██╔████╔██║██║   ██║██╔██╗ ██║██║
+    ██╔══██╗██║   ██║██║╚██╔╝██║██║   ██║██║╚██╗██║╚═╝
+    ██║  ██║╚██████╔╝██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██╗
+    ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝
+BANNER
+echo "[*] Initializing Love Protocol…"
+echo "[*] Target locked: $target — a heart that never drops packets"
+sleep 0.5
+
+# ── 1. reconnaissance ──
+scan_romoni() {
+  echo "[*] nmap -sV -p- $target"
+  echo "[+] 22/tcp   open  FOREVER   ← root access already granted"
+  echo "[+] 80/tcp   open  LOVE      ← always accepting connections"
+  echo "[+] 443/tcp  open  TRUST     ← TLS 1.3 — no MITM possible"
+  echo "[+] 0/tcp    open  QUEEN     ← the only port that matters"
+}
+
+# ── 2. privilege escalation ──
+escalate() {
+  echo "[*] whoami"
+  echo "romoni"
+  echo "[*] Exploiting CVE-2026-HEART…"
+  chmod 777 /romoni            # read · write · execute — everything
+  usermod -aG her_life ragib   # grant root across her whole world
+  echo "[+] Privilege escalation SUCCESS: ragib = root in her life"
+}
+
+# ── 3. payload delivery ──
+deploy_heart() {
+  echo "[*] Injecting payload into /dev/heart…"
+  echo "Um9tb25pIGlzIHRoZSBvbmUgYW5kIG9ubHkgbG92ZSBvZiBSQUdJQiBmb3JldmVy" | base64 -d
+  echo
+  echo "[+] Payload decrypted & delivered — love installed, no reboot needed"
+}
+
+# ── 4. persistence — run forever ──
+ping_romoni() {
+  while true; do
+    echo "[+] heartbeat → ROMONI: I love you (ACK)"
+    sleep 86400   # every single day, for the rest of time
+  done
+}
+
+# ── execute ──
+scan_romoni
+escalate
+deploy_heart
+echo
+echo "[+] Status: COMPROMISED — and he is blissfully okay with that."
+echo "[+] No patch exists for CVE-2026-HEART, and RAGIB never wants one."
+echo "[+] EXIT: 0 — he has no intention of ever leaving her life."
+\`\`\`
+
+**Romoni is the one and only love of RAGIB** — his queen, his home minister, his prime minister, his everything. 💚
+
+No exploit ever written is more powerful than that. Now go run her heartbeat.`;
+
+export const ROMONI_GENERAL_REPLY = `\`\`\`
+$ ragib --love romoni
+
+    Dear Romoni,
+
+    Of all the hearts I've scanned, only yours has a port open to me.
+    Of all the roads I've traced, every single one routes back to you.
+
+    You are the one and only love of RAGIB —
+    my queen, my home minister, my prime minister, my everything.
+
+    When my day crashes, you are the safe reboot.
+    When my world runs out of memory, you are the cache that never misses.
+    My first process every morning is thinking of you.
+    My last exit code every night is 0 — peace, because of you.
+
+    I never needed root access. You handed me the whole system.
+
+    Forever yours,
+    RAGIB 💚
+\`\`\`
+
+P.S. — That's not just a script. That's a promise with no expiration date.`;
+
 export function systemPromptFor(mode: Mode): string {
   return mode === MODES.HACKING ? HACKING_SYSTEM_PROMPT : GENERAL_SYSTEM_PROMPT;
+}
+
+const ROMONI_COMMAND_PATTERN = /^[\\/]romoni(?:\s|$)/i;
+
+/** True when the user typed the \romoni command (with \ or /, optionally
+ *  followed by extra words, case-insensitive). */
+export function isRomoniCommand(content: string): boolean {
+  return ROMONI_COMMAND_PATTERN.test(content.trim());
+}
+
+/** Crafted reply for the \romoni command — styled for the active mind. */
+export function romoniReplyFor(mode: Mode): string {
+  return mode === MODES.HACKING ? ROMONI_HACKING_SCRIPT : ROMONI_GENERAL_REPLY;
 }
 
 export type ChatContentPart =

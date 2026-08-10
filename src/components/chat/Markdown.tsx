@@ -60,7 +60,11 @@ function CodeBlock({ children, className }: { children?: ReactNode; className?: 
           )}
         </button>
       </div>
-      <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed">
+      {/* On phones and narrow tablets, wrap code lines so long output (like
+          the \romoni letter) is fully readable; on larger screens keep the
+          classic horizontal scroll. The Copy button always preserves the
+          exact original text either way. */}
+      <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed max-md:whitespace-pre-wrap max-md:break-words max-md:text-[12.5px]">
         {children}
       </pre>
     </div>

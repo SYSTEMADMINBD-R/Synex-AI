@@ -108,6 +108,14 @@ export default function Dashboard() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const didInit = useRef(false);
 
+  // Keep the composer focused on desktop; on touch devices auto-focusing
+  // pops the keyboard open over the chat, so leave it alone.
+  const focusComposer = () => {
+    if (window.matchMedia("(pointer: fine)").matches) {
+      inputRef.current?.focus();
+    }
+  };
+
   const activeMode: Mode = activeConversation?.mode ?? pendingMode;
   const accent = MODE_META[activeMode].accent;
   const ModeIcon = MODE_META[activeMode].icon;
@@ -129,7 +137,7 @@ export default function Dashboard() {
   }, [input]);
 
   useEffect(() => {
-    if (activeId) inputRef.current?.focus();
+    if (activeId) focusComposer();
   }, [activeId]);
 
   // Stop any in-flight speech recognition when leaving the page.
@@ -157,7 +165,7 @@ export default function Dashboard() {
         prev.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
         return [];
       });
-      inputRef.current?.focus();
+      focusComposer();
     }
   };
 
@@ -309,7 +317,7 @@ export default function Dashboard() {
       prev.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
       return [];
     });
-    inputRef.current?.focus();
+    focusComposer();
   };
 
   const handleConfirmDelete = async () => {
@@ -481,13 +489,13 @@ export default function Dashboard() {
                     <button
                       type="button"
                       aria-label="Delete conversation"
-                      className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded-md p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100 group-hover:visible sm:block sm:visible"
+                      className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-md p-2 text-muted-foreground transition-all hover:bg-destructive/15 hover:text-destructive sm:pointer-events-none sm:p-1.5 sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteTarget(conversation._id);
                       }}
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 className="size-4 sm:size-3.5" />
                     </button>
                   </div>
                 );
@@ -538,7 +546,7 @@ export default function Dashboard() {
 
       {/* ---------- Main ---------- */}
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-border/70 bg-background/80 px-3 py-2.5 backdrop-blur sm:px-5">
+        <header className="flex items-center gap-2 border-b border-border/70 bg-background/80 px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur sm:px-5">
           <Button
             type="button"
             variant="ghost"
@@ -572,7 +580,19 @@ export default function Dashboard() {
               </>
             )}
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            {activeConversation && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 text-muted-foreground transition-colors hover:text-destructive lg:hidden"
+                onClick={() => setDeleteTarget(activeConversation._id)}
+                aria-label="Delete conversation"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -617,7 +637,7 @@ export default function Dashboard() {
         </div>
 
         {/* ---------- Composer ---------- */}
-        <div className="border-t border-border/70 bg-background/80 px-3 pb-3 pt-3 backdrop-blur sm:px-6 sm:pb-4">
+        <div className="border-t border-border/70 bg-background/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-6 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto max-w-3xl">
             <div
               className={cn(

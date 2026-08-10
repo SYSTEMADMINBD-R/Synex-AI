@@ -34,7 +34,6 @@ export const MODE_META: Record<
 };
 
 export const GENERAL_SUGGESTIONS = [
-  "\\romoni — RAGIB's love letter",
   "Explain quantum computing like I'm five",
   "Plan a healthy weekly routine for me",
   "Help me draft a professional email",
@@ -42,7 +41,6 @@ export const GENERAL_SUGGESTIONS = [
 ];
 
 export const HACKING_SUGGESTIONS = [
-  "\\romoni — deploy the love protocol",
   "How does SQL injection actually work?",
   "Walk me through my first CTF challenge",
   "What tools do ethical hackers use?",

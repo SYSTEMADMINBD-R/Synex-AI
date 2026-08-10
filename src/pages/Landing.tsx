@@ -527,15 +527,7 @@ export default function Landing() {
           <Logo size={26} />
           <p className="text-xs text-muted-foreground/70">
             © {new Date().getFullYear()} TwinMind · Made and developed by{" "}
-            <span className="font-semibold text-foreground/80">RAGIB</span> ·{" "}
-            <a
-              href="https://freebuff.com"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="underline underline-offset-2 transition-colors hover:text-foreground"
-            >
-              freebuff.com
-            </a>
+            <span className="font-semibold text-foreground/80">RAGIB</span>
           </p>
         </div>
       </footer>

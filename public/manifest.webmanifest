@@ -1,11 +1,11 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "TwinMind",
+  "short_name": "TwinMind",
+  "description": "TwinMind — one AI, two minds. A sharp everyday assistant plus an uncensored hacking mentor for beginners.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#0e1116",
+  "theme_color": "#0e1116",
   "icons": [
     {
       "src": "/logo.png",

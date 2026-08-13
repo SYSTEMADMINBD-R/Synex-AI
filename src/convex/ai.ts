@@ -12,6 +12,12 @@
 // requests, and if a key is rate-limited (429) or the provider errors, the
 // request automatically fails over to the next key in the list.
 //
+// Multiple Gemini keys are supported the same way for General mode:
+// GEMINI_API_KEYS (comma-separated), numbered GEMINI_API_KEY_2..9, plus the
+// primary GEMINI_API_KEY. Keys are rotated round-robin across requests, and
+// 401/429/5xx errors fail over to the next key — so a rate-limited or
+// quota-exhausted key never stalls the app.
+//
 // Model resilience: Gemini models get retired by Google over time (e.g.
 // gemini-2.0-flash was shut down June 2026), so General mode falls back
 // through a chain of known-good models until one responds.
@@ -308,48 +314,83 @@ function geminiModels(): string[] {
   return [...new Set(chain)];
 }
 
+/** All configured Gemini API keys — from GEMINI_API_KEYS (comma-separated),
+ *  numbered GEMINI_API_KEY_2..9, plus the primary GEMINI_API_KEY. The primary
+ *  key is tried first; rotation and failover spread load across the rest. */
+function geminiApiKeys(): string[] {
+  const keys: string[] = [];
+  const add = (key: string | undefined) => {
+    const trimmed = (key ?? "").trim();
+    if (trimmed && !keys.includes(trimmed)) keys.push(trimmed);
+  };
+  for (const raw of (process.env.GEMINI_API_KEYS ?? "").split(",")) add(raw);
+  for (let i = 2; i <= 9; i++) add(process.env[`GEMINI_API_KEY_${i}`]);
+  add(process.env.GEMINI_API_KEY);
+  return keys;
+}
+
+/** Starting index for round-robin rotation; advanced after every request so
+ *  consecutive calls spread across all configured Gemini keys. */
+let geminiCursor = 0;
+
 /** Stream a completion, calling onDelta with the full text so far after every
  *  chunk. The caller decides how often to persist progress (throttled DB
- *  writes in the action). Errors still surface as a normal CompletionResult. */
+ *  writes in the action). Errors still surface as a normal CompletionResult.
+ *
+ *  Key resilience: keys are rotated round-robin across requests; a
+ *  rate-limited (429), unauthorized (401), or errored (5xx) key fails over to
+ *  the next one, and retired models walk the fallback chain. */
 async function generateGemini(
   systemPrompt: string,
   history: ChatMessage[],
   onDelta?: (text: string) => void | Promise<void>,
 ): Promise<CompletionResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { ok: false, error: "missing-key" };
-  const client = getClient(apiKey, GEMINI_BASE_URL);
-  for (const model of geminiModels()) {
-    try {
-      const stream = await client.chat.completions.create({
-        model,
-        max_tokens: GEMINI_MAX_TOKENS,
-        stream: true,
-        messages: toSdkMessages(systemPrompt, history),
-      });
-      let full = "";
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content;
-        if (delta) {
-          full += delta;
-          if (onDelta) await onDelta(full);
+  const keys = geminiApiKeys();
+  if (keys.length === 0) return { ok: false, error: "missing-key" };
+
+  const models = geminiModels();
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const apiKey = keys[(geminiCursor + attempt) % keys.length];
+    const client = getClient(apiKey, GEMINI_BASE_URL);
+    for (const model of models) {
+      try {
+        const stream = await client.chat.completions.create({
+          model,
+          max_tokens: GEMINI_MAX_TOKENS,
+          stream: true,
+          messages: toSdkMessages(systemPrompt, history),
+        });
+        let full = "";
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            full += delta;
+            if (onDelta) await onDelta(full);
+          }
         }
+        const content = full.trim();
+        if (!content) return { ok: false, error: "model" };
+        return { ok: true, content };
+      } catch (error) {
+        lastError = error;
+        console.error(`[TwinMind] Gemini stream failed (${model}):`, error);
+        // Retired/unknown model — try the next one in the chain.
+        if (isModelNotFoundError(error)) continue;
+        // Key-level problem (401/429/5xx): fail over to the next key.
+        // Anything else would fail identically on every key — stop.
+        break;
       }
-      const content = full.trim();
-      if (!content) return { ok: false, error: "model" };
-      return { ok: true, content };
-    } catch (error) {
-      console.error(`[TwinMind] Gemini stream failed (${model}):`, error);
-      // Retired/unknown model — try the next one in the chain.
-      if (isModelNotFoundError(error)) continue;
-      // Anything else (bad key, rate limit, network) won't be fixed by a
-      // different model — surface the error.
-      return { ok: false, error: "network" };
     }
+    if (!isRetryableError(lastError)) break;
   }
 
-  console.error("[TwinMind] All Gemini models failed.");
-  return { ok: false, error: "model" };
+  geminiCursor = (geminiCursor + 1) % keys.length;
+  console.error(
+    "[TwinMind] Gemini stream failed after trying all keys/models:",
+    lastError,
+  );
+  return { ok: false, error: "network" };
 }
 
 /** Starting index for round-robin rotation; advanced after every request so

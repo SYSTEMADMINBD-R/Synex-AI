@@ -216,7 +216,9 @@ export const deleteConversation = mutation({
 /** Friendly in-chat notice shown when the provider key(s) are not configured. */
 const SETUP_NOTICE = `Heads up — I can't reach my brain right now. The app is missing an **AI API key**.
 
-- **General mode** needs a **Gemini API key** (\`GEMINI_API_KEY\`).
+- **General mode** needs a **Gemini API key** (\`GEMINI_API_KEY\`). For extra
+  speed and reliability, add more keys in \`GEMINI_API_KEYS\` (comma-separated)
+  or \`GEMINI_API_KEY_2\`, \`GEMINI_API_KEY_3\`… — they're rotated automatically.
 - **Hacking mode** needs a **Groq API key** (\`GROQ_API_KEY\`, or several comma-separated in \`GROQ_API_KEYS\`).
 
 Add them in your project's **Keys/API keys** settings, and I'll be ready to answer anything in both modes.`;
@@ -369,25 +371,45 @@ export const sendMessage = action({
     });
 
     // Throttled persistence: write at most once every ~200ms (or sooner if a
-    // big chunk lands), then always force the final text so the stored reply
-    // is exact even if the stream died partway.
+    // big chunk lands). Intermediate writes are fire-and-forget so DB latency
+    // never throttles the stream itself (the old `await` made every chunk wait
+    // on a full mutation round-trip — that alone stretched answers by seconds).
+    // The final forced write is awaited so the exact stored text is guaranteed
+    // before the action returns, even if the stream died partway.
     let flushedLength = 0;
     let lastFlushAt = 0;
-    const flush = async (text: string, force = false) => {
+    let inFlight = 0;
+    const flush = (text: string, force = false): Promise<void> => {
       const now = Date.now();
       if (
         !force &&
         now - lastFlushAt < 200 &&
         text.length - flushedLength < 150
       ) {
-        return;
+        return Promise.resolve();
       }
       lastFlushAt = now;
       flushedLength = text.length;
-      await ctx.runMutation(api.chat.updateMessageContent, {
-        messageId: assistantMessageId,
-        content: text,
+      const write = ctx
+        .runMutation(api.chat.updateMessageContent, {
+          messageId: assistantMessageId,
+          content: text,
+        })
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+      if (force) return write;
+      inFlight += 1;
+      write.then(() => {
+        inFlight -= 1;
       });
+      // If writes pile up (slow DB), yield briefly so we don't queue
+      // unboundedly — then keep streaming.
+      if (inFlight > 3) {
+        return new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      return Promise.resolve();
     };
 
     const result = await generateChatCompletion(args.mode, history, flush);

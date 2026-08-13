@@ -101,6 +101,7 @@ export default function Dashboard() {
   );
 
   const sendMessage = useAction(api.chat.sendMessage);
+  const createConversation = useMutation(api.chat.createConversation);
   const deleteConversation = useMutation(api.chat.deleteConversation);
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
 
@@ -119,6 +120,13 @@ export default function Dashboard() {
   const activeMode: Mode = activeConversation?.mode ?? pendingMode;
   const accent = MODE_META[activeMode].accent;
   const ModeIcon = MODE_META[activeMode].icon;
+
+  // While the backend streams the reply, the assistant's placeholder message
+  // row carries the thinking indicator — so only show the trailing bubble when
+  // the last row isn't already the streaming reply.
+  const lastMessage = (messages ?? [])[(messages ?? []).length - 1];
+  const showThinkingBubble =
+    isThinking && lastMessage?.role !== "assistant";
 
   // Select the most recent conversation on first load.
   useEffect(() => {
@@ -175,8 +183,16 @@ export default function Dashboard() {
     setIsThinking(true);
     setInput("");
     try {
-      const result = await sendMessage({
-        conversationId: activeId ?? undefined,
+      // For a brand-new chat, create the conversation up front and select it
+      // immediately so the streaming reply is visible while it's generated,
+      // instead of only appearing after the whole action finishes.
+      let conversationId = activeId;
+      if (conversationId === null) {
+        conversationId = await createConversation({ mode: activeMode });
+        setActiveId(conversationId);
+      }
+      await sendMessage({
+        conversationId,
         mode: activeMode,
         content,
         ...(attachments.length > 0
@@ -192,7 +208,6 @@ export default function Dashboard() {
             }
           : {}),
       });
-      setActiveId(result.conversationId as Id<"conversations">);
     } catch (error) {
       console.error("Send failed:", error);
       toast.error("Message failed to send. Please try again.");
@@ -631,7 +646,7 @@ export default function Dashboard() {
                     mode={activeMode}
                   />
                 ))}
-                {isThinking && <ThinkingBubble mode={activeMode} />}
+                {showThinkingBubble && <ThinkingBubble mode={activeMode} />}
               </div>
               <div ref={endRef} className="h-px" />
             </div>
@@ -833,6 +848,12 @@ function MessageRow({
   // General even if the toggle was switched later.
   const meta = MODE_META[message.mode ?? mode];
   const Icon = meta.icon;
+
+  // An assistant message with no content yet is the streaming placeholder —
+  // show the animated thinking bubble in its place until tokens arrive.
+  if (!isUser && !message.content.trim()) {
+    return <ThinkingBubble mode={message.mode ?? mode} />;
+  }
 
   const renderAttachments = () =>
     message.attachments && message.attachments.length > 0 ? (

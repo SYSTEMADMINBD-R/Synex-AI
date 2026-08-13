@@ -131,7 +131,7 @@ export const insertMessage = mutation({
     if (!conversation || conversation.userId !== userId) {
       throw new Error("Conversation not found");
     }
-    await ctx.db.insert("messages", {
+    return ctx.db.insert("messages", {
       conversationId,
       role,
       content,
@@ -139,6 +139,27 @@ export const insertMessage = mutation({
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
       createdAt: Date.now(),
     });
+  },
+});
+
+/** Patch a single message's content — used by sendMessage to stream the
+ *  assistant reply into the database progressively so the reactive
+ *  getMessages query shows text appearing in real time. Ownership-checked. */
+export const updateMessageContent = mutation({
+  args: {
+    messageId: v.id("messages"),
+    content: v.string(),
+  },
+  handler: async (ctx, { messageId, content }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    const message = await ctx.db.get(messageId);
+    if (!message) throw new Error("Message not found");
+    const conversation = await ctx.db.get(message.conversationId);
+    if (!conversation || conversation.userId !== userId) {
+      throw new Error("Conversation not found");
+    }
+    await ctx.db.patch(messageId, { content });
   },
 });
 
@@ -324,24 +345,62 @@ export const sendMessage = action({
             : message.content,
       }));
 
-    let reply: string;
+    // The \romoni command is answered locally and instantly — no streaming.
     if (romoniCommand) {
-      reply = romoniReplyFor(args.mode);
-    } else {
-      const result = await generateChatCompletion(args.mode, history);
-      reply = result.ok
+      await ctx.runMutation(api.chat.insertMessage, {
+        conversationId,
+        role: "assistant",
+        content: romoniReplyFor(args.mode),
+        mode: args.mode,
+      });
+      return { conversationId };
+    }
+
+    // Stream the AI reply into the chat: insert an empty assistant message
+    // first, then progressively write the provider's tokens into it. The
+    // reactive getMessages query picks up each patch, so the reply appears to
+    // type itself instead of the UI staying frozen until the whole answer is
+    // ready (the reason General mode felt so slow).
+    const assistantMessageId = await ctx.runMutation(api.chat.insertMessage, {
+      conversationId,
+      role: "assistant",
+      content: "",
+      mode: args.mode,
+    });
+
+    // Throttled persistence: write at most once every ~200ms (or sooner if a
+    // big chunk lands), then always force the final text so the stored reply
+    // is exact even if the stream died partway.
+    let flushedLength = 0;
+    let lastFlushAt = 0;
+    const flush = async (text: string, force = false) => {
+      const now = Date.now();
+      if (
+        !force &&
+        now - lastFlushAt < 200 &&
+        text.length - flushedLength < 150
+      ) {
+        return;
+      }
+      lastFlushAt = now;
+      flushedLength = text.length;
+      await ctx.runMutation(api.chat.updateMessageContent, {
+        messageId: assistantMessageId,
+        content: text,
+      });
+    };
+
+    const result = await generateChatCompletion(args.mode, history, flush);
+    // Always land the final text (or an error message) in the database, even
+    // if the stream died partway through.
+    await flush(
+      result.ok
         ? result.content
         : result.error === "missing-key"
           ? SETUP_NOTICE
-          : "I hit a snag while thinking. Please try again in a moment.";
-    }
-
-    await ctx.runMutation(api.chat.insertMessage, {
-      conversationId,
-      role: "assistant",
-      content: reply,
-      mode: args.mode,
-    });
+          : "I hit a snag while thinking. Please try again in a moment.",
+      true,
+    );
 
     return { conversationId };
   },

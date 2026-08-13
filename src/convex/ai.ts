@@ -308,24 +308,38 @@ function geminiModels(): string[] {
   return [...new Set(chain)];
 }
 
+/** Stream a completion, calling onDelta with the full text so far after every
+ *  chunk. The caller decides how often to persist progress (throttled DB
+ *  writes in the action). Errors still surface as a normal CompletionResult. */
 async function generateGemini(
   systemPrompt: string,
   history: ChatMessage[],
+  onDelta?: (text: string) => void | Promise<void>,
 ): Promise<CompletionResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { ok: false, error: "missing-key" };
-  const client = getClient(apiKey, GEMINI_BASE_URL);    for (const model of geminiModels()) {
+  const client = getClient(apiKey, GEMINI_BASE_URL);
+  for (const model of geminiModels()) {
     try {
-      const completion = await client.chat.completions.create({
+      const stream = await client.chat.completions.create({
         model,
         max_tokens: GEMINI_MAX_TOKENS,
+        stream: true,
         messages: toSdkMessages(systemPrompt, history),
       });
-      const content = completion.choices[0]?.message?.content?.trim();
+      let full = "";
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          full += delta;
+          if (onDelta) await onDelta(full);
+        }
+      }
+      const content = full.trim();
       if (!content) return { ok: false, error: "model" };
       return { ok: true, content };
     } catch (error) {
-      console.error(`[TwinMind] Gemini request failed (${model}):`, error);
+      console.error(`[TwinMind] Gemini stream failed (${model}):`, error);
       // Retired/unknown model — try the next one in the chain.
       if (isModelNotFoundError(error)) continue;
       // Anything else (bad key, rate limit, network) won't be fixed by a
@@ -345,6 +359,7 @@ let groqCursor = 0;
 async function generateGroq(
   systemPrompt: string,
   history: ChatMessage[],
+  onDelta?: (text: string) => void | Promise<void>,
 ): Promise<CompletionResult> {
   const keys = groqApiKeys();
   if (keys.length === 0) return { ok: false, error: "missing-key" };
@@ -365,12 +380,21 @@ async function generateGroq(
       const isVision = model === GROQ_VISION_MODEL;
       const payload = withImages && !isVision ? stripImages(history) : history;
       try {
-        const completion = await client.chat.completions.create({
+        const stream = await client.chat.completions.create({
           model,
           max_tokens: GROQ_MAX_TOKENS,
+          stream: true,
           messages: toSdkMessages(systemPrompt, payload),
         });
-        const content = completion.choices[0]?.message?.content?.trim();
+        let full = "";
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            full += delta;
+            if (onDelta) await onDelta(full);
+          }
+        }
+        const content = full.trim();
         if (!content) return { ok: false, error: "model" };
         return { ok: true, content };
       } catch (error) {
@@ -386,18 +410,21 @@ async function generateGroq(
 
   groqCursor = (groqCursor + 1) % keys.length;
   console.error(
-    "[TwinMind] Groq request failed after trying all keys:",
+    "[TwinMind] Groq stream failed after trying all keys:",
     lastError,
   );
   return { ok: false, error: "network" };
 }
 
+/** Generate a reply for the given mode, streaming the provider's tokens to
+ *  onDelta (full text so far) as they arrive. */
 export async function generateChatCompletion(
   mode: Mode,
   history: ChatMessage[],
+  onDelta?: (text: string) => void | Promise<void>,
 ): Promise<CompletionResult> {
   const systemPrompt = systemPromptFor(mode);
   return mode === MODES.HACKING
-    ? generateGroq(systemPrompt, history)
-    : generateGemini(systemPrompt, history);
+    ? generateGroq(systemPrompt, history, onDelta)
+    : generateGemini(systemPrompt, history, onDelta);
 }

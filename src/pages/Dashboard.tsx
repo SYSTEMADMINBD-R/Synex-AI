@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
@@ -37,6 +38,7 @@ import {
   Square,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -88,6 +90,13 @@ export default function Dashboard() {
     }[]
   >([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [fastMode, setFastMode] = useState(() => {
+    try {
+      return localStorage.getItem("twinmind-fast-mode") === "1";
+    } catch {
+      return false;
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
@@ -156,6 +165,15 @@ export default function Dashboard() {
     };
   }, []);
 
+  // Remember the Fast-mode preference across visits.
+  useEffect(() => {
+    try {
+      localStorage.setItem("twinmind-fast-mode", fastMode ? "1" : "0");
+    } catch {
+      // storage unavailable — the preference just won't persist
+    }
+  }, [fastMode]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isThinking, activeId]);
@@ -195,6 +213,7 @@ export default function Dashboard() {
         conversationId,
         mode: activeMode,
         content,
+        fast: fastMode,
         ...(attachments.length > 0
           ? {
               attachments: attachments.map(
@@ -598,6 +617,44 @@ export default function Dashboard() {
             )}
           </div>
           <div className="ml-auto flex items-center gap-1">
+            {activeMode === "general" && (
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 transition-colors",
+                  fastMode
+                    ? "border-amber-400/40 bg-amber-400/10"
+                    : "border-border/70 bg-card/70",
+                )}
+                title={
+                  fastMode
+                    ? "Fast replies on — using the lite model (gemini-3.1-flash-lite)"
+                    : "Fast replies off — using the full model (gemini-3.5-flash)"
+                }
+              >
+                <Zap
+                  className={cn(
+                    "size-3.5 transition-colors",
+                    fastMode
+                      ? "fill-amber-400/25 text-amber-400"
+                      : "text-muted-foreground/70",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "hidden text-[11px] font-semibold sm:inline",
+                    fastMode ? "text-amber-300" : "text-muted-foreground",
+                  )}
+                >
+                  Fast
+                </span>
+                <Switch
+                  checked={fastMode}
+                  onCheckedChange={setFastMode}
+                  className="scale-90"
+                  aria-label="Toggle fast replies"
+                />
+              </div>
+            )}
             {activeConversation && (
               <Button
                 type="button"

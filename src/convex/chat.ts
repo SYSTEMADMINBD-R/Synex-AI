@@ -246,6 +246,7 @@ export const sendMessage = action({
     conversationId: v.optional(v.id("conversations")),
     mode: modeValidator,
     content: v.string(),
+    fast: v.optional(v.boolean()),
     attachments: v.optional(
       v.array(
         v.object({
@@ -412,7 +413,9 @@ export const sendMessage = action({
       return Promise.resolve();
     };
 
-    const result = await generateChatCompletion(args.mode, history, flush);
+    const result = await generateChatCompletion(args.mode, history, flush, {
+      fast: args.fast === true,
+    });
     // Always land the final text (or an error message) in the database, even
     // if the stream died partway through.
     await flush(

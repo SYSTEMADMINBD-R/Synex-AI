@@ -2,7 +2,8 @@
 // Convex actions.
 //
 // Provider routing:
-//   - General mode runs on Gemini (GEMINI_API_KEY, model GEMINI_MODEL)
+//   - General mode runs on Gemini (GEMINI_API_KEY, model GEMINI_MODEL or
+//     GEMINI_FAST_MODEL when Fast mode is on)
 //   - Hacking mode runs on Groq   (GROQ_API_KEYS / GROQ_API_KEY, model GROQ_MODEL)
 //
 // Both Groq's and Gemini's APIs are OpenAI-compatible, so all providers share
@@ -306,12 +307,22 @@ function isModelNotFoundError(error: unknown): boolean {
 
 /* ---------------- Generators ---------------- */
 
-/** Candidate models for General mode: user override first (if any), then the
+/** Preferred model for General mode. Standard mode uses GEMINI_MODEL (default
+ *  gemini-3.5-flash); Fast mode uses GEMINI_FAST_MODEL (default
+ *  gemini-3.1-flash-lite) for snappier replies. */
+function geminiPreferredModel(fast: boolean): string {
+  const configured = (
+    fast
+      ? process.env.GEMINI_FAST_MODEL ?? "gemini-3.1-flash-lite"
+      : process.env.GEMINI_MODEL ?? "gemini-3.5-flash"
+  ).trim();
+  return configured || "gemini-3.5-flash";
+}
+
+/** Candidate models for General mode: the preferred model first, then the
  *  fallback chain. Tried in order until one responds. */
-function geminiModels(): string[] {
-  const override = (process.env.GEMINI_MODEL ?? "").trim();
-  const chain = override ? [override, ...GEMINI_MODEL_FALLBACKS] : [...GEMINI_MODEL_FALLBACKS];
-  return [...new Set(chain)];
+function geminiModels(fast: boolean): string[] {
+  return [...new Set([geminiPreferredModel(fast), ...GEMINI_MODEL_FALLBACKS])];
 }
 
 /** All configured Gemini API keys — from GEMINI_API_KEYS (comma-separated),
@@ -344,11 +355,12 @@ async function generateGemini(
   systemPrompt: string,
   history: ChatMessage[],
   onDelta?: (text: string) => void | Promise<void>,
+  fast = false,
 ): Promise<CompletionResult> {
   const keys = geminiApiKeys();
   if (keys.length === 0) return { ok: false, error: "missing-key" };
 
-  const models = geminiModels();
+  const models = geminiModels(fast);
   let lastError: unknown = null;
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const apiKey = keys[(geminiCursor + attempt) % keys.length];
@@ -458,14 +470,17 @@ async function generateGroq(
 }
 
 /** Generate a reply for the given mode, streaming the provider's tokens to
- *  onDelta (full text so far) as they arrive. */
+ *  onDelta (full text so far) as they arrive. `fast` only affects General
+ *  mode — it swaps in the lighter, quicker Gemini model. Hacking mode always
+ *  uses Groq and ignores it. */
 export async function generateChatCompletion(
   mode: Mode,
   history: ChatMessage[],
   onDelta?: (text: string) => void | Promise<void>,
+  options: { fast?: boolean } = {},
 ): Promise<CompletionResult> {
   const systemPrompt = systemPromptFor(mode);
   return mode === MODES.HACKING
     ? generateGroq(systemPrompt, history, onDelta)
-    : generateGemini(systemPrompt, history, onDelta);
+    : generateGemini(systemPrompt, history, onDelta, options.fast === true);
 }

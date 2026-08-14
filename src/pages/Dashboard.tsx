@@ -1035,6 +1035,7 @@ function MessageRow({
         </div>
         <span className="mt-1 block pl-1 text-[10px] text-muted-foreground/60">
           {meta.label} mind · {format(message.createdAt, "h:mm a")}
+          {message.model ? ` · ${message.model}` : ""}
         </span>
       </div>
     </motion.div>

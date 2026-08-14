@@ -252,7 +252,7 @@ function stripImages(messages: ChatMessage[]): ChatMessage[] {
 }
 
 type CompletionResult =
-  | { ok: true; content: string }
+  | { ok: true; content: string; model?: string }
   | { ok: false; error: "missing-key" | "model" | "network" };
 
 /* ---------------- Clients ---------------- */
@@ -383,7 +383,7 @@ async function generateGemini(
         }
         const content = full.trim();
         if (!content) return { ok: false, error: "model" };
-        return { ok: true, content };
+        return { ok: true, content, model };
       } catch (error) {
         lastError = error;
         console.error(`[TwinMind] Gemini stream failed (${model}):`, error);
@@ -449,7 +449,7 @@ async function generateGroq(
         }
         const content = full.trim();
         if (!content) return { ok: false, error: "model" };
-        return { ok: true, content };
+        return { ok: true, content, model };
       } catch (error) {
         lastError = error;
         // Retired/unknown model — try the fallback model on the same key.

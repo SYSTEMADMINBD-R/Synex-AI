@@ -149,8 +149,9 @@ export const updateMessageContent = mutation({
   args: {
     messageId: v.id("messages"),
     content: v.string(),
+    model: v.optional(v.string()),
   },
-  handler: async (ctx, { messageId, content }) => {
+  handler: async (ctx, { messageId, content, model }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Not authenticated");
     const message = await ctx.db.get(messageId);
@@ -159,7 +160,10 @@ export const updateMessageContent = mutation({
     if (!conversation || conversation.userId !== userId) {
       throw new Error("Conversation not found");
     }
-    await ctx.db.patch(messageId, { content });
+    await ctx.db.patch(messageId, {
+      content,
+      ...(model !== undefined ? { model } : {}),
+    });
   },
 });
 
@@ -446,7 +450,7 @@ export const sendMessage = action({
     let flushedLength = 0;
     let lastFlushAt = 0;
     let inFlight = 0;
-    const flush = (text: string, force = false): Promise<void> => {
+    const flush = (text: string, force = false, model?: string): Promise<void> => {
       const now = Date.now();
       if (
         !force &&
@@ -461,6 +465,7 @@ export const sendMessage = action({
         .runMutation(api.chat.updateMessageContent, {
           messageId: assistantMessageId,
           content: text,
+          ...(model !== undefined ? { model } : {}),
         })
         .then(
           () => undefined,
@@ -491,6 +496,7 @@ export const sendMessage = action({
           ? SETUP_NOTICE
           : "I hit a snag while thinking. Please try again in a moment.",
       true,
+      result.ok ? result.model : undefined,
     );
 
     return { conversationId };

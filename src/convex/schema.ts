@@ -68,6 +68,7 @@ const schema = defineSchema(
       role: v.union(v.literal("user"), v.literal("assistant")),
       content: v.string(),
       mode: modeValidator,
+      model: v.optional(v.string()),
       attachments: v.optional(v.array(attachmentValidator)),
       createdAt: v.number(),
     }).index("by_conversation", ["conversationId", "createdAt"]),

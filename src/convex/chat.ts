@@ -344,18 +344,30 @@ export const sendMessage = action({
     // provider call, so it's instant and works even without API keys.
     const romoniCommand = isRomoniCommand(content);
 
+    // Resolve the conversation: use the caller's id if it still exists and
+    // belongs to them; otherwise self-heal by starting a fresh conversation.
+    // A stale id happens in practice when a guest's data is purged (fresh
+    // guest sessions start empty) while the UI still holds the old id — the
+    // old code failed the whole send with "Conversation not found". The
+    // returned conversationId is what the caller should select afterwards.
     let conversationId = args.conversationId;
-    if (conversationId === undefined) {
+    let conversation: { title: string; mode: Mode } | null = null;
+    if (conversationId !== undefined) {
+      conversation = await ctx.runQuery(api.chat.getConversation, {
+        conversationId,
+      });
+    }
+    if (conversation === null) {
       conversationId = await ctx.runMutation(api.chat.createConversation, {
         mode: args.mode,
       });
+      conversation = { title: "New chat", mode: args.mode };
     }
-
-    // Ownership check + fetch current conversation state.
-    const conversation = await ctx.runQuery(api.chat.getConversation, {
-      conversationId,
-    });
-    if (conversation === null) throw new Error("Conversation not found");
+    // Both branches above guarantee an id; this narrows it for the rest of
+    // the function (unreachable in practice).
+    if (conversationId === undefined) {
+      throw new Error("Conversation not found");
+    }
 
     // Resolve attachment storage ids to public URLs.
     const attachments = await Promise.all(

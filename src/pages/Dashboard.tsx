@@ -170,6 +170,17 @@ export default function Dashboard() {
     }
   }, [conversations]);
 
+  // If the active conversation no longer exists or isn't owned by this user
+  // (e.g. a guest session purge wiped it, or it was deleted elsewhere), drop
+  // the stale id so the next send starts a fresh conversation instead of
+  // failing with "Conversation not found".
+  useEffect(() => {
+    if (activeId && activeConversation === null) {
+      setActiveId(null);
+      setInput("");
+    }
+  }, [activeId, activeConversation]);
+
   // Auto-resize the composer + keep focus when switching conversations.
   useEffect(() => {
     const ta = inputRef.current;
@@ -234,7 +245,7 @@ export default function Dashboard() {
         conversationId = await createConversation({ mode: activeMode });
         setActiveId(conversationId);
       }
-      await sendMessage({
+      const result = await sendMessage({
         conversationId,
         mode: activeMode,
         content,
@@ -252,6 +263,11 @@ export default function Dashboard() {
             }
           : {}),
       });
+      // If the action self-healed onto a fresh conversation (the id we passed
+      // was stale), select the conversation it actually wrote to.
+      if (result && result.conversationId !== conversationId) {
+        setActiveId(result.conversationId as Id<"conversations">);
+      }
     } catch (error) {
       console.error("Send failed:", error);
       toast.error("Message failed to send. Please try again.");

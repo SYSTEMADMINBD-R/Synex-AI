@@ -198,6 +198,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       <UserX className="mr-2 h-4 w-4" />
                       Continue as Guest
                     </Button>
+                    <p className="mt-2.5 text-center text-[11.5px] leading-4 text-muted-foreground/70">
+                      Guest mode — your chats are never saved and are deleted
+                      when you leave.
+                    </p>
                   </div>
                 </CardContent>
               </form>

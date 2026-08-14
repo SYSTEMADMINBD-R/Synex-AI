@@ -8,7 +8,7 @@
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { action, mutation, query } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
 import { MODES, modeValidator, type Mode } from "./schema";
 import {
@@ -210,6 +210,72 @@ export const deleteConversation = mutation({
       await ctx.db.delete(message._id);
     }
     await ctx.db.delete(conversationId);
+  },
+});
+
+/** Guest mode: permanently delete every conversation and message owned by the
+ *  current user. Anonymous guest sessions use this so their chats never
+ *  survive — it runs when a guest starts a fresh session and when they leave. */
+export const purgeGuestData = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const conversation of conversations) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", conversation._id),
+        )
+        .collect();
+      for (const message of messages) {
+        await ctx.db.delete(message._id);
+      }
+      await ctx.db.delete(conversation._id);
+    }
+    return { deleted: conversations.length };
+  },
+});
+
+/** Internal sweep run by the hourly cron: remove abandoned guest data —
+ *  conversations belonging to anonymous users that haven't been touched in
+ *  24h. Covers guests who close the browser without signing out, so nothing
+ *  they typed can linger on the server. */
+export const cleanupGuestData = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const users = await ctx.db.query("users").collect();
+    const anonymousIds = new Set(
+      users.filter((user) => user.isAnonymous === true).map((user) => user._id),
+    );
+    if (anonymousIds.size === 0) return { deleted: 0 };
+    let deleted = 0;
+    for (const userId of anonymousIds) {
+      const conversations = await ctx.db
+        .query("conversations")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .filter((q) => q.lt(q.field("updatedAt"), cutoff))
+        .collect();
+      for (const conversation of conversations) {
+        const messages = await ctx.db
+          .query("messages")
+          .withIndex("by_conversation", (q) =>
+            q.eq("conversationId", conversation._id),
+          )
+          .collect();
+        for (const message of messages) {
+          await ctx.db.delete(message._id);
+        }
+        await ctx.db.delete(conversation._id);
+        deleted += 1;
+      }
+    }
+    return { deleted };
   },
 });
 

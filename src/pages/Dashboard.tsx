@@ -37,6 +37,7 @@ import {
   Send,
   Square,
   Trash2,
+  UserX,
   X,
   Zap,
 } from "lucide-react";
@@ -113,6 +114,30 @@ export default function Dashboard() {
   const createConversation = useMutation(api.chat.createConversation);
   const deleteConversation = useMutation(api.chat.deleteConversation);
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
+  const purgeGuestData = useMutation(api.chat.purgeGuestData);
+
+  // Anonymous "Continue as Guest" sessions never save history: their chats
+  // are wiped when the guest leaves, and each fresh guest session (new tab)
+  // starts empty. The marker lives in sessionStorage so a refresh within the
+  // same tab keeps the in-progress chat streaming intact.
+  const isGuest = user?.isAnonymous === true;
+
+  useEffect(() => {
+    if (!isGuest) return;
+    let marker: string | null = null;
+    try {
+      marker = sessionStorage.getItem("twinmind-guest-session");
+    } catch {
+      /* storage unavailable — wipe anyway */
+    }
+    if (marker === "1") return;
+    purgeGuestData().catch(() => undefined);
+    try {
+      sessionStorage.setItem("twinmind-guest-session", "1");
+    } catch {
+      /* storage unavailable — ignore */
+    }
+  }, [isGuest, purgeGuestData]);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -374,6 +399,14 @@ export default function Dashboard() {
 
   const handleSignOut = async () => {
     try {
+      if (isGuest) {
+        // Guest chats are never saved — permanently wipe before leaving.
+        try {
+          await purgeGuestData();
+        } catch {
+          /* best effort — the hourly sweep covers it */
+        }
+      }
       await signOut();
       navigate("/");
     } catch (error) {
@@ -560,7 +593,9 @@ export default function Dashboard() {
                 {displayName}
               </p>
               <p className="truncate text-[11px] text-muted-foreground">
-                {user?.email ?? "Guest session"}
+                {isGuest
+                  ? "Guest — nothing is saved"
+                  : (user?.email ?? "Guest session")}
               </p>
             </div>
             <Button
@@ -617,6 +652,15 @@ export default function Dashboard() {
             )}
           </div>
           <div className="ml-auto flex items-center gap-1">
+            {isGuest && (
+              <span
+                className="hidden items-center gap-1 rounded-full border border-dashed border-border/70 bg-card/60 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground sm:flex"
+                title="Guest mode — your chats are deleted when you leave and are never saved"
+              >
+                <UserX className="size-3" />
+                Guest · nothing saved
+              </span>
+            )}
             {activeMode === "general" && (
               <div
                 className={cn(

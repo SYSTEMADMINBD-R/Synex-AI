@@ -1,25 +1,32 @@
 {
-  "name": "TwinMind — One AI. Two Minds.",
+  "name": "TwinMind — One AI, Two Minds",
   "short_name": "TwinMind",
-  "description": "TwinMind — one AI, two minds. A sharp everyday assistant plus an uncensored hacking mentor for beginners.",
+  "description": "TwinMind — one AI, two minds. A sharp everyday assistant plus an uncensored cybersecurity mentor for beginners.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0e1116",
   "theme_color": "#0e1116",
-  "categories": ["productivity", "utilities"],
+  "categories": ["productivity", "education"],
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/logo-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/logo.png",
+      "src": "/logo-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

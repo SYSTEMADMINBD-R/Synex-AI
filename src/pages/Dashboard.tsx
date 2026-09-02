@@ -455,7 +455,7 @@ export default function Dashboard() {
       </AnimatePresence>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-[284px] shrink-0 flex-col border-r border-border/70 bg-sidebar transition-transform duration-200 lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-[300px] shrink-0 flex-col border-r border-border/70 bg-sidebar shadow-2xl transition-transform duration-300 ease-out lg:static lg:translate-x-0 lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -534,7 +534,7 @@ export default function Dashboard() {
                   <div
                     key={conversation._id}
                     className={cn(
-                      "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2.5 transition-colors",
+                      "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 transition-colors sm:px-2.5 sm:py-2.5",
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "hover:bg-sidebar-accent/60",
@@ -574,7 +574,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       aria-label="Delete conversation"
-                      className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-md p-2 text-muted-foreground transition-all hover:bg-destructive/15 hover:text-destructive sm:pointer-events-none sm:p-1.5 sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100"
+                      className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-lg p-2.5 text-muted-foreground transition-all hover:bg-destructive/15 hover:text-destructive sm:pointer-events-none sm:p-1.5 sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteTarget(conversation._id);
@@ -633,7 +633,7 @@ export default function Dashboard() {
 
       {/* ---------- Main ---------- */}
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-border/70 bg-background/80 px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur sm:px-5">
+        <header className="flex items-center gap-2 border-b border-border/70 bg-background/80 px-3 pb-2 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur sm:px-5 sm:pb-2.5">
           <Button
             type="button"
             variant="ghost"
@@ -644,7 +644,7 @@ export default function Dashboard() {
             <Menu className="size-5" />
           </Button>
           <ModeToggle value={activeMode} onChange={handleModeChange} size="sm" />
-          <div className="ml-2 hidden min-w-0 sm:block">
+          <div className="ml-2 min-w-0">
             {activeConversation ? (
               <>
                 <p className="truncate text-[13.5px] font-semibold leading-5">
@@ -652,7 +652,7 @@ export default function Dashboard() {
                     ? "New conversation"
                     : activeConversation.title}
                 </p>
-                <p className="text-[11px] leading-4 text-muted-foreground">
+                <p className="hidden text-[11px] leading-4 text-muted-foreground sm:block">
                   {MODE_META[activeConversation.mode].tagline}
                 </p>
               </>
@@ -661,7 +661,7 @@ export default function Dashboard() {
                 <p className="text-[13.5px] font-semibold leading-5">
                   New conversation
                 </p>
-                <p className="text-[11px] leading-4 text-muted-foreground">
+                <p className="hidden text-[11px] leading-4 text-muted-foreground sm:block">
                   Pick a mind and ask your first question
                 </p>
               </>
@@ -741,7 +741,7 @@ export default function Dashboard() {
         </header>
 
         {/* ---------- Messages ---------- */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-2 sm:pb-0">
           {isBooting ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -754,8 +754,8 @@ export default function Dashboard() {
               onSend={handleSend}
             />
           ) : (
-            <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-              <div className="space-y-6">
+            <div className="mx-auto max-w-3xl px-3 py-5 sm:px-6 sm:py-6">
+              <div className="space-y-5 sm:space-y-6">
                 {(messages ?? []).map((message) => (
                   <MessageRow
                     key={message._id}
@@ -775,7 +775,7 @@ export default function Dashboard() {
           <div className="mx-auto max-w-3xl">
             <div
               className={cn(
-                "flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-2 pl-4 transition-all focus-within:ring-2",
+                "flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-2.5 pl-4 transition-all focus-within:ring-2 sm:p-2 sm:pl-4",
                 activeMode === "hacking"
                   ? "focus-within:border-[var(--mode-hacking)]/50 focus-within:ring-[var(--mode-hacking)]/15"
                   : "focus-within:border-[var(--mode-general)]/50 focus-within:ring-[var(--mode-general)]/15",
@@ -786,26 +786,26 @@ export default function Dashboard() {
                   {attachments.map((attachment, index) => (
                     <div
                       key={attachment.storageId}
-                      className="group relative flex items-center gap-2 rounded-xl border border-border/70 bg-background/60 py-1 pl-1 pr-2"
+                      className="group relative flex items-center gap-2 rounded-xl border border-border/70 bg-background/60 py-1.5 pl-1.5 pr-2.5 sm:py-1 sm:pl-1 sm:pr-2"
                     >
                       {attachment.preview ? (
                         <img
                           src={attachment.preview}
                           alt={attachment.name}
-                          className="size-10 rounded-lg object-cover"
+                          className="size-12 rounded-lg object-cover sm:size-10"
                         />
                       ) : (
-                        <span className="flex size-10 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+                        <span className="flex size-12 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground sm:size-10">
                           <FileText className="size-4" />
                         </span>
                       )}
-                      <span className="max-w-32 truncate text-xs text-muted-foreground">
+                      <span className="max-w-[140px] truncate text-xs text-muted-foreground sm:max-w-32">
                         {attachment.name}
                       </span>
                       <button
                         type="button"
                         aria-label={`Remove ${attachment.name}`}
-                        className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
+                        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive sm:size-5"
                         onClick={() => {
                           setAttachments((prev) => {
                             const next = prev.filter(
@@ -833,23 +833,23 @@ export default function Dashboard() {
                   className="hidden"
                   onChange={(e) => handleFiles(e.target.files)}
                 />
-                <div className="flex flex-col gap-0.5 pb-1">
+                <div className="flex flex-col gap-1 pb-1 sm:gap-0.5">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-8 cursor-pointer rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+                    className="size-9 cursor-pointer rounded-lg text-muted-foreground transition-colors hover:text-foreground sm:size-8"
                     onClick={() => fileInputRef.current?.click()}
                     aria-label="Attach files"
                   >
-                    <Paperclip className="size-4" />
+                    <Paperclip className="size-[18px] sm:size-4" />
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "size-8 cursor-pointer rounded-lg transition-colors",
+                      "size-9 cursor-pointer rounded-lg transition-colors sm:size-8",
                       isRecording
                         ? "animate-pulse text-destructive"
                         : "text-muted-foreground hover:text-foreground",
@@ -858,9 +858,9 @@ export default function Dashboard() {
                     aria-label={isRecording ? "Stop recording" : "Voice input"}
                   >
                     {isRecording ? (
-                      <Square className="size-3.5 fill-current" />
+                      <Square className="size-4 fill-current" />
                     ) : (
-                      <Mic className="size-4" />
+                      <Mic className="size-[18px] sm:size-4" />
                     )}
                   </Button>
                 </div>
@@ -882,12 +882,12 @@ export default function Dashboard() {
                         ? "Ask anything about hacking — no filters…"
                         : "Ask TwinMind anything…"
                   }
-                  className="max-h-40 flex-1 resize-none bg-transparent py-2 text-[14.5px] leading-6 outline-none placeholder:text-muted-foreground/60"
+                  className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/60 sm:min-h-0 sm:py-2 sm:text-[14.5px]"
                 />
                 <Button
                   type="button"
                   size="icon"
-                  className="size-10 shrink-0 rounded-xl"
+                  className="size-11 shrink-0 rounded-xl sm:size-10"
                   style={{
                     background: accent,
                     color: "#0e1116",
@@ -1010,9 +1010,9 @@ function MessageRow({
         animate={{ opacity: 1, y: 0 }}
         className="flex justify-end"
       >
-        <div className="flex max-w-[85%] flex-col items-end sm:max-w-[75%]">
+        <div className="flex max-w-[88%] flex-col items-end sm:max-w-[75%]">
           <div
-            className="rounded-2xl rounded-br-md border px-4 py-3 text-[14.5px] leading-7 whitespace-pre-wrap"
+            className="rounded-2xl rounded-br-md border px-4 py-3 text-[15px] leading-7 whitespace-pre-wrap sm:text-[14.5px]"
             style={{
               background: `${meta.accent}14`,
               borderColor: `${meta.accent}33`,
@@ -1046,7 +1046,7 @@ function MessageRow({
         <Icon className="size-4" strokeWidth={2.2} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="rounded-2xl rounded-tl-md border border-border/70 bg-card px-4 py-3">
+        <div className="rounded-2xl rounded-tl-md border border-border/70 bg-card px-4 py-3 sm:px-4">
           <Markdown content={message.content} />
         </div>
         <span className="mt-1 block pl-1 text-[10px] text-muted-foreground/60">
@@ -1120,7 +1120,7 @@ function EmptyState({
   const chips = suggestionChips(mode);
 
   return (
-    <div className="flex h-full items-center justify-center px-4 py-10">
+    <div className="flex h-full items-center justify-center px-5 py-8 sm:px-4 sm:py-10">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1128,32 +1128,32 @@ function EmptyState({
         className="w-full max-w-xl text-center"
       >
         <div
-          className="mx-auto flex size-16 items-center justify-center rounded-2xl border bg-card shadow-xl transition-colors duration-300"
+          className="mx-auto flex size-[72px] items-center justify-center rounded-2xl border bg-card shadow-xl transition-colors duration-300 sm:size-16"
           style={{
             borderColor: `${accent}40`,
             boxShadow: `0 16px 40px -16px ${accent}66`,
           }}
         >
-          <Icon className="size-7" style={{ color: accent }} strokeWidth={2} />
+          <Icon className="size-7 sm:size-7" style={{ color: accent }} strokeWidth={2} />
         </div>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-[28px]">
+        <h1 className="mt-5 text-[26px] font-bold tracking-tight sm:text-[28px]">
           {mode === "hacking" ? "BREACH" : "TwinMind"}
         </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+        <p className="mx-auto mt-2.5 max-w-md text-[13.5px] leading-6 text-muted-foreground sm:text-sm">
           {meta.description}
         </p>
 
-        <div className="mt-6 flex justify-center">
+        <div className="mt-5 flex justify-center sm:mt-6">
           <ModeToggle value={mode} onChange={onModeChange} />
         </div>
 
-        <div className="mx-auto mt-6 grid max-w-lg gap-2 sm:grid-cols-2">
+        <div className="mx-auto mt-5 grid max-w-lg gap-2 sm:mt-6 sm:grid-cols-2">
           {chips.map((chip) => (
             <button
               key={chip}
               type="button"
               onClick={() => onSend(chip)}
-              className="cursor-pointer rounded-xl border border-border/70 bg-card px-3.5 py-2.5 text-left text-[13px] leading-5 text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-card/80"
+              className="cursor-pointer rounded-xl border border-border/70 bg-card px-4 py-3 text-left text-[13.5px] leading-5 text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-card/80 sm:px-3.5 sm:py-2.5 sm:text-[13px]"
               style={{ boxShadow: "0 8px 24px -18px oklch(0 0 0 / 0.9)" }}
             >
               <span className="mr-1.5" style={{ color: accent }}>

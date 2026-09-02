@@ -41,12 +41,16 @@ const GEMINI_MODEL_FALLBACKS = [
   "gemini-2.0-flash",
 ];
 
-const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
-/** If the configured Groq model is unavailable, fall back to this one. */
-const GROQ_MODEL_FALLBACK = "llama-3.3-70b-versatile";
-/** Vision-capable Groq model used when the user attaches images. The default
- *  text model can't read images, so we switch automatically. */
-const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL ?? "llama-3.2-11b-vision-preview";
+const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-120b";
+/** Fallback Groq models tried in order when the primary is retired/unavailable. */
+const GROQ_MODEL_FALLBACKS = [
+  "openai/gpt-oss-120b",
+  "qwen/qwen3.6-27b",
+  "openai/gpt-oss-20b",
+];
+/** Groq model used when the user attaches images (text-only models can't
+ *  read images). Falls back through the same chain as text models. */
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL ?? "openai/gpt-oss-120b";
 
 /** Output token budget. Hacking mode gets a much larger cap so BREACH can give
  *  complete, deep walkthroughs without being cut off. Overridable via env. */
@@ -421,8 +425,8 @@ async function generateGroq(
   // With images: vision model first, then the text model (images stripped).
   // Without images: just the text model chain.
   const models = withImages
-    ? [GROQ_VISION_MODEL, GROQ_MODEL, GROQ_MODEL_FALLBACK]
-    : [GROQ_MODEL, GROQ_MODEL_FALLBACK];
+    ? [GROQ_VISION_MODEL, GROQ_MODEL, ...GROQ_MODEL_FALLBACKS]
+    : [GROQ_MODEL, ...GROQ_MODEL_FALLBACKS];
   const dedupedModels = models.filter((m, i, arr) => arr.indexOf(m) === i);
 
   let lastError: unknown = null;

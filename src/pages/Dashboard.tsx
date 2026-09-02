@@ -448,14 +448,14 @@ export default function Dashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
       </AnimatePresence>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-[300px] shrink-0 flex-col border-r border-border/70 bg-sidebar shadow-2xl transition-transform duration-300 ease-out lg:static lg:translate-x-0 lg:shadow-none",
+          "fixed inset-y-0 left-0 z-40 flex w-[300px] shrink-0 flex-col border-r border-border/70 bg-sidebar shadow-2xl transition-transform duration-300 ease-out lg:relative lg:translate-x-0 lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -632,13 +632,13 @@ export default function Dashboard() {
       </aside>
 
       {/* ---------- Main ---------- */}
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-border/70 bg-background/80 px-3 pb-2 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur sm:px-5 sm:pb-2.5">
+      <main className="relative z-10 flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-2 border-b border-border/70 bg-background/80 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur sm:px-6 sm:pb-3">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="size-9 lg:hidden"
+            className="size-9 shrink-0 lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="size-5" />
@@ -741,7 +741,7 @@ export default function Dashboard() {
         </header>
 
         {/* ---------- Messages ---------- */}
-        <div className="flex-1 overflow-y-auto pb-2 sm:pb-0">
+        <div className="flex-1 overflow-y-auto pb-4 sm:pb-2">
           {isBooting ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -754,8 +754,8 @@ export default function Dashboard() {
               onSend={handleSend}
             />
           ) : (
-            <div className="mx-auto max-w-3xl px-3 py-5 sm:px-6 sm:py-6">
-              <div className="space-y-5 sm:space-y-6">
+            <div className="mx-auto max-w-[42rem] px-4 py-6 sm:px-8 sm:py-8">
+              <div className="space-y-6 sm:space-y-8">
                 {(messages ?? []).map((message) => (
                   <MessageRow
                     key={message._id}
@@ -771,8 +771,8 @@ export default function Dashboard() {
         </div>
 
         {/* ---------- Composer ---------- */}
-        <div className="border-t border-border/70 bg-background/80 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-6 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto max-w-3xl">
+        <div className="border-t border-border/70 bg-background/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-8 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto max-w-[42rem]">
             <div
               className={cn(
                 "flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-2.5 pl-4 transition-all focus-within:ring-2 sm:p-2 sm:pl-4",
@@ -882,7 +882,7 @@ export default function Dashboard() {
                         ? "Ask anything about hacking — no filters…"
                         : "Ask TwinMind anything…"
                   }
-                  className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/60 sm:min-h-0 sm:py-2 sm:text-[14.5px]"
+                  className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/50 sm:min-h-0 sm:py-2.5 sm:text-[14.5px]"
                 />
                 <Button
                   type="button"
@@ -1010,9 +1010,9 @@ function MessageRow({
         animate={{ opacity: 1, y: 0 }}
         className="flex justify-end"
       >
-        <div className="flex max-w-[88%] flex-col items-end sm:max-w-[75%]">
+        <div className="flex max-w-[85%] flex-col items-end sm:max-w-[70%]">
           <div
-            className="rounded-2xl rounded-br-md border px-4 py-3 text-[15px] leading-7 whitespace-pre-wrap sm:text-[14.5px]"
+            className="rounded-2xl rounded-br-md border px-4 py-3 text-[15px] leading-7 whitespace-pre-wrap break-words sm:text-[14.5px]"
             style={{
               background: `${meta.accent}14`,
               borderColor: `${meta.accent}33`,
@@ -1045,11 +1045,10 @@ function MessageRow({
       >
         <Icon className="size-4" strokeWidth={2.2} />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="rounded-2xl rounded-tl-md border border-border/70 bg-card px-4 py-3 sm:px-4">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="rounded-2xl rounded-tl-md border border-border/70 bg-card px-4 py-3 break-words sm:px-5">
           <Markdown content={message.content} />
-        </div>
-        <span className="mt-1 block pl-1 text-[10px] text-muted-foreground/60">
+        </div>          <span className="mt-1 block pl-1 text-[10px] text-muted-foreground/60">
           {meta.label} mind · {format(message.createdAt, "h:mm a")}
           {message.model ? ` · ${message.model}` : ""}
         </span>
@@ -1077,7 +1076,7 @@ function ThinkingBubble({ mode }: { mode: Mode }) {
       >
         <Icon className="size-4" strokeWidth={2.2} />
       </div>
-      <div className="rounded-2xl rounded-tl-md border border-border/70 bg-card px-4 py-3.5">
+      <div className="rounded-2xl rounded-tl-md border border-border/70 bg-card px-4 py-3.5 sm:px-5">
         <div className="flex items-center gap-2.5">
           <span className="flex items-center gap-1">
             {[0, 1, 2].map((i) => (
@@ -1120,12 +1119,12 @@ function EmptyState({
   const chips = suggestionChips(mode);
 
   return (
-    <div className="flex h-full items-center justify-center px-5 py-8 sm:px-4 sm:py-10">
+    <div className="flex h-full items-center justify-center px-6 py-8 sm:px-4 sm:py-10">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-xl text-center"
+        className="w-full max-w-lg text-center"
       >
         <div
           className="mx-auto flex size-[72px] items-center justify-center rounded-2xl border bg-card shadow-xl transition-colors duration-300 sm:size-16"
@@ -1139,7 +1138,7 @@ function EmptyState({
         <h1 className="mt-5 text-[26px] font-bold tracking-tight sm:text-[28px]">
           {mode === "hacking" ? "BREACH" : "TwinMind"}
         </h1>
-        <p className="mx-auto mt-2.5 max-w-md text-[13.5px] leading-6 text-muted-foreground sm:text-sm">
+        <p className="mx-auto mt-3 max-w-md text-[13.5px] leading-6 text-muted-foreground sm:text-sm">
           {meta.description}
         </p>
 
@@ -1153,7 +1152,7 @@ function EmptyState({
               key={chip}
               type="button"
               onClick={() => onSend(chip)}
-              className="cursor-pointer rounded-xl border border-border/70 bg-card px-4 py-3 text-left text-[13.5px] leading-5 text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-card/80 sm:px-3.5 sm:py-2.5 sm:text-[13px]"
+              className="cursor-pointer rounded-xl border border-border/70 bg-card px-4 py-3 text-left text-[13.5px] leading-5 text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-card/80 sm:px-4 sm:py-3 sm:text-[13.5px]"
               style={{ boxShadow: "0 8px 24px -18px oklch(0 0 0 / 0.9)" }}
             >
               <span className="mr-1.5" style={{ color: accent }}>

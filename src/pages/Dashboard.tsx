@@ -644,7 +644,7 @@ export default function Dashboard() {
             <Menu className="size-5" />
           </Button>
           <ModeToggle value={activeMode} onChange={handleModeChange} size="sm" />
-          <div className="ml-2 min-w-0">
+          <div className="ml-2 hidden min-w-0 sm:block">
             {activeConversation ? (
               <>
                 <p className="truncate text-[13.5px] font-semibold leading-5">
@@ -678,42 +678,65 @@ export default function Dashboard() {
               </span>
             )}
             {activeMode === "general" && (
-              <div
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 transition-colors",
-                  fastMode
-                    ? "border-amber-400/40 bg-amber-400/10"
-                    : "border-border/70 bg-card/70",
-                )}
-                title={
-                  fastMode
-                    ? "Fast replies on — using the lite model (gemini-3.1-flash-lite)"
-                    : "Fast replies off — using the full model (gemini-3.5-flash)"
-                }
-              >
-                <Zap
+              <>
+                {/* Compact icon toggle on phones — one tap switches fast replies */}
+                <button
+                  type="button"
+                  onClick={() => setFastMode((v) => !v)}
+                  aria-pressed={fastMode}
+                  aria-label="Toggle fast replies"
                   className={cn(
-                    "size-3.5 transition-colors",
+                    "flex size-9 cursor-pointer items-center justify-center rounded-full border transition-colors sm:hidden",
                     fastMode
-                      ? "fill-amber-400/25 text-amber-400"
-                      : "text-muted-foreground/70",
-                  )}
-                />
-                <span
-                  className={cn(
-                    "hidden text-[11px] font-semibold sm:inline",
-                    fastMode ? "text-amber-300" : "text-muted-foreground",
+                      ? "border-amber-400/50 bg-amber-400/15 text-amber-400"
+                      : "border-border/70 bg-card/70 text-muted-foreground/70",
                   )}
                 >
-                  Fast
-                </span>
-                <Switch
-                  checked={fastMode}
-                  onCheckedChange={setFastMode}
-                  className="scale-90"
-                  aria-label="Toggle fast replies"
-                />
-              </div>
+                  <Zap
+                    className={cn(
+                      "size-4",
+                      fastMode && "fill-amber-400/30",
+                    )}
+                    strokeWidth={2.2}
+                  />
+                </button>
+                <div
+                  className={cn(
+                    "hidden items-center gap-1.5 rounded-full border px-2.5 py-1.5 transition-colors sm:flex",
+                    fastMode
+                      ? "border-amber-400/40 bg-amber-400/10"
+                      : "border-border/70 bg-card/70",
+                  )}
+                  title={
+                    fastMode
+                      ? "Fast replies on — using the lite model (gemini-3.1-flash-lite)"
+                      : "Fast replies off — using the full model (gemini-3.5-flash)"
+                  }
+                >
+                  <Zap
+                    className={cn(
+                      "size-3.5 transition-colors",
+                      fastMode
+                        ? "fill-amber-400/25 text-amber-400"
+                        : "text-muted-foreground/70",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "hidden text-[11px] font-semibold sm:inline",
+                      fastMode ? "text-amber-300" : "text-muted-foreground",
+                    )}
+                  >
+                    Fast
+                  </span>
+                  <Switch
+                    checked={fastMode}
+                    onCheckedChange={setFastMode}
+                    className="scale-90"
+                    aria-label="Toggle fast replies"
+                  />
+                </div>
+              </>
             )}
             {activeConversation && (
               <Button
@@ -833,7 +856,7 @@ export default function Dashboard() {
                   className="hidden"
                   onChange={(e) => handleFiles(e.target.files)}
                 />
-                <div className="flex flex-col gap-1 pb-1 sm:gap-0.5">
+                <div className="flex items-center gap-1 pb-1 sm:flex-col sm:items-stretch sm:gap-0.5">
                   <Button
                     type="button"
                     variant="ghost"
@@ -1119,7 +1142,7 @@ function EmptyState({
   const chips = suggestionChips(mode);
 
   return (
-    <div className="flex h-full items-center justify-center px-6 py-8 sm:px-4 sm:py-10">
+    <div className="flex h-full items-center justify-center px-5 py-6 sm:px-4 sm:py-10">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1127,32 +1150,39 @@ function EmptyState({
         className="w-full max-w-lg text-center"
       >
         <div
-          className="mx-auto flex size-[72px] items-center justify-center rounded-2xl border bg-card shadow-xl transition-colors duration-300 sm:size-16"
+          className="mx-auto flex size-[60px] items-center justify-center rounded-2xl border bg-card shadow-xl transition-colors duration-300 sm:size-16"
           style={{
             borderColor: `${accent}40`,
             boxShadow: `0 16px 40px -16px ${accent}66`,
           }}
         >
-          <Icon className="size-7 sm:size-7" style={{ color: accent }} strokeWidth={2} />
+          <Icon
+            className="size-6 sm:size-7"
+            style={{ color: accent }}
+            strokeWidth={2}
+          />
         </div>
-        <h1 className="mt-5 text-[26px] font-bold tracking-tight sm:text-[28px]">
+        <h1 className="mt-4 text-[22px] font-bold tracking-tight sm:mt-5 sm:text-[28px]">
           {mode === "hacking" ? "BREACH" : "TwinMind"}
         </h1>
-        <p className="mx-auto mt-3 max-w-md text-[13.5px] leading-6 text-muted-foreground sm:text-sm">
+        <p className="mx-auto mt-2 max-w-md text-[13px] leading-5.5 text-muted-foreground sm:mt-3 sm:text-sm sm:leading-6">
           {meta.description}
         </p>
 
-        <div className="mt-5 flex justify-center sm:mt-6">
+        {/* The header already has the General/Hacking switcher on phones —
+            only show the big picker on screens where the header toggle is
+            tucked away next to the sidebar. */}
+        <div className="mt-5 hidden justify-center sm:mt-6 sm:flex">
           <ModeToggle value={mode} onChange={onModeChange} />
         </div>
 
-        <div className="mx-auto mt-5 grid max-w-lg gap-2 sm:mt-6 sm:grid-cols-2">
+        <div className="mx-auto mt-4 grid max-w-lg gap-2 sm:mt-6 sm:grid-cols-2">
           {chips.map((chip) => (
             <button
               key={chip}
               type="button"
               onClick={() => onSend(chip)}
-              className="cursor-pointer rounded-xl border border-border/70 bg-card px-4 py-3 text-left text-[13.5px] leading-5 text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-card/80 sm:px-4 sm:py-3 sm:text-[13.5px]"
+              className="cursor-pointer rounded-xl border border-border/70 bg-card px-3.5 py-2.5 text-left text-[13px] leading-5 text-foreground/85 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-card/80 sm:px-4 sm:py-3 sm:text-[13.5px]"
               style={{ boxShadow: "0 8px 24px -18px oklch(0 0 0 / 0.9)" }}
             >
               <span className="mr-1.5" style={{ color: accent }}>

@@ -1142,12 +1142,15 @@ function EmptyState({
   const chips = suggestionChips(mode);
 
   return (
-    <div className="flex h-full items-center justify-center px-5 py-6 sm:px-4 sm:py-10">
+    // min-h-full + m-auto keeps the welcome screen centered, but lets it
+    // scroll instead of clipping when the on-screen keyboard shrinks the
+    // viewport on phones.
+    <div className="flex min-h-full px-5 py-6 sm:px-4 sm:py-10">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-lg text-center"
+        className="m-auto w-full max-w-lg text-center"
       >
         <div
           className="mx-auto flex size-[60px] items-center justify-center rounded-2xl border bg-card shadow-xl transition-colors duration-300 sm:size-16"

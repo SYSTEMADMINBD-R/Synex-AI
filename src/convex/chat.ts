@@ -8,8 +8,14 @@
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { action, internalMutation, mutation, query } from "./_generated/server";
-import { api } from "./_generated/api";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import { MODES, modeValidator, type Mode } from "./schema";
 import {
   generateChatCompletion,
@@ -26,11 +32,17 @@ export const listConversations = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
-    return ctx.db
+    const conversations = await ctx.db
       .query("conversations")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(50);
+    // The sidebar only needs to know THAT a chat is locked — never the hash
+    // bytes themselves, which would enable offline PIN guessing.
+    return conversations.map(({ pinHash, pinSalt, ...rest }) => ({
+      ...rest,
+      isLocked: typeof pinHash === "string" && pinHash.length > 0,
+    }));
   },
 });
 
@@ -41,17 +53,34 @@ export const getConversation = query({
     if (userId === null) return null;
     const conversation = await ctx.db.get(conversationId);
     if (!conversation || conversation.userId !== userId) return null;
-    return conversation;
+    // Chat-lock privacy: the pinHash bytes must stay on the server so a stolen
+    // client cache can't be used for offline PIN guessing. The client gets an
+    // isLocked flag instead, plus pinSalt (to hash the PIN locally) and
+    // pinHint (to display on the lock screen).
+    const { pinHash: secret, ...safeConversation } = conversation;
+    return {
+      ...safeConversation,
+      isLocked: typeof secret === "string" && secret.length > 0,
+    };
   },
 });
 
 export const getMessages = query({
-  args: { conversationId: v.id("conversations") },
-  handler: async (ctx, { conversationId }) => {
+  args: {
+    conversationId: v.id("conversations"),
+    pinHash: v.optional(v.string()),
+  },
+  handler: async (ctx, { conversationId, pinHash: callerHash }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     const conversation = await ctx.db.get(conversationId);
     if (!conversation || conversation.userId !== userId) return null;
+    // Chat-lock: a locked conversation only returns its messages when the
+    // caller presents the matching PIN hash. An absent/wrong hash yields an
+    // empty list instead of an error so the UI can render its lock screen.
+    if (conversation.pinHash && conversation.pinHash !== callerHash) {
+      return [];
+    }
     return ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
@@ -195,6 +224,107 @@ export const repairConversationModes = mutation({
   },
 });
 
+// ---------- Chat lock (PIN protection) ----------
+// A locked conversation hides its messages behind a PIN. The raw PIN never
+// reaches the server: the client hashes sha256(salt + ":" + pin) and the
+// server only ever stores/compares that hash (same code as src/lib/pinHash.ts).
+// Withdrawing a lock requires the current PIN so anyone who picked up the
+// phone can't just unlock it.
+
+/** Lock (or re-lock) a conversation. The client hashes the PIN locally
+ *  (sha256(salt + ":" + pin), see src/lib/pinHash.ts) so the raw PIN never
+ *  leaves the device — the server only ever stores the salt + hash. */
+export const setConversationLock = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    salt: v.string(),
+    hash: v.string(),
+    hint: v.optional(v.string()),
+  },
+  handler: async (ctx, { conversationId, salt, hash, hint }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation || conversation.userId !== userId) {
+      throw new Error("Conversation not found");
+    }
+    if (salt.length < 16 || hash.length < 32) {
+      throw new Error("Invalid lock payload");
+    }
+    await ctx.db.patch(conversationId, {
+      pinSalt: salt,
+      pinHash: hash,
+      pinHint: hint?.trim() ? hint.trim() : undefined,
+    });
+  },
+});
+
+/** Verify a lock hash for a locked conversation without changing anything. */
+export const verifyConversationLock = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    hash: v.string(),
+  },
+  handler: async (ctx, { conversationId, hash }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation || conversation.userId !== userId) {
+      throw new Error("Conversation not found");
+    }
+    return verifyLock(conversation, hash);
+  },
+});
+
+/** Remove a conversation's lock — requires the current PIN's hash. */
+export const removeConversationLock = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    hash: v.string(),
+  },
+  handler: async (ctx, { conversationId, hash }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation || conversation.userId !== userId) {
+      throw new Error("Conversation not found");
+    }
+    if (!verifyLock(conversation, hash)) {
+      throw new Error("Incorrect PIN");
+    }
+    await ctx.db.patch(conversationId, {
+      pinSalt: undefined,
+      pinHash: undefined,
+      pinHint: undefined,
+    });
+  },
+});
+
+/** Internal: verify a PIN against a conversation's lock (used by actions,
+ *  which can't touch ctx.db directly). Returns true when unlocked. */
+export const verifyLockInternal = internalQuery({
+  args: {
+    conversationId: v.id("conversations"),
+    hash: v.string(),
+  },
+  handler: async (ctx, { conversationId, hash }) => {
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) return true;
+    return verifyLock(conversation, hash);
+  },
+});
+
+/** True if this conversation is PIN-locked and the PIN matches (or the
+ *  conversation isn't locked). Throws on wrong PIN for locked conversations. */
+function verifyLock(
+  conversation: { pinSalt?: string; pinHash?: string },
+  hash: string,
+): boolean {
+  const { pinSalt, pinHash: storedHash } = conversation;
+  if (!pinSalt || !storedHash) return true; // not locked
+  return hash === storedHash;
+}
+
 export const deleteConversation = mutation({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, { conversationId }) => {
@@ -317,6 +447,8 @@ export const sendMessage = action({
     mode: modeValidator,
     content: v.string(),
     fast: v.optional(v.boolean()),
+    // Chat-lock: required when the target conversation is PIN-locked.
+    pinHash: v.optional(v.string()),
     attachments: v.optional(
       v.array(
         v.object({
@@ -347,7 +479,7 @@ export const sendMessage = action({
     // Resolve the conversation: use the caller's id if it still exists and
     // belongs to them; otherwise self-heal by starting a fresh conversation.
     // A stale id happens in practice when a guest's data is purged (fresh
-    // guest sessions start empty) while the UI still holds the old id — the
+    // guest sessions start empty) while the UI always holds the old id — the
     // old code failed the whole send with "Conversation not found". The
     // returned conversationId is what the caller should select afterwards.
     let conversationId = args.conversationId;
@@ -367,6 +499,16 @@ export const sendMessage = action({
     // the function (unreachable in practice).
     if (conversationId === undefined) {
       throw new Error("Conversation not found");
+    }
+
+    // Chat-lock enforcement: sending into a locked conversation requires the
+    // correct PIN (hashed on the client; see src/lib/pinHash.ts).
+    const unlocked = await ctx.runQuery(internal.chat.verifyLockInternal, {
+      conversationId,
+      hash: args.pinHash ?? "",
+    });
+    if (!unlocked) {
+      throw new Error("Incorrect PIN");
     }
 
     // Resolve attachment storage ids to public URLs.

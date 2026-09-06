@@ -12,6 +12,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -29,12 +39,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FileText,
   Loader2,
+  Lock,
+  LockOpen,
   Menu,
   Mic,
   PanelLeftClose,
   Paperclip,
   Plus,
   Send,
+  ShieldCheck,
   Square,
   Trash2,
   UserX,
@@ -42,6 +55,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { pinHash, randomSalt } from "@/lib/pinHash";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -91,6 +105,26 @@ export default function Dashboard() {
     }[]
   >([]);
   const [isRecording, setIsRecording] = useState(false);
+  // ---- Chat lock (PIN protection) ----
+  // unlockedFor: which conversation was unlocked with which PIN — kept in
+  // memory because getMessages must present the hash on every reactive
+  // refresh. An unlock ends when the user locks the chat again, picks
+  // another conversation, or reloads the page.
+  const [unlockedFor, setUnlockedFor] = useState<{
+    id: string;
+    pin: string;
+  } | null>(null);
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
+  const [lockPin, setLockPin] = useState("");
+  const [lockPinConfirm, setLockPinConfirm] = useState("");
+  const [lockHint, setLockHint] = useState("");
+  const [isSettingLock, setIsSettingLock] = useState(false);
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [removePin, setRemovePin] = useState("");
+  const [isRemovingLock, setIsRemovingLock] = useState(false);
+  const [unlockInput, setUnlockInput] = useState("");
+  const [unlockError, setUnlockError] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [fastMode, setFastMode] = useState(() => {
     try {
       return localStorage.getItem("twinmind-fast-mode") === "1";
@@ -107,7 +141,17 @@ export default function Dashboard() {
   );
   const messages = useQuery(
     api.chat.getMessages,
-    activeId ? { conversationId: activeId } : "skip",
+    activeId
+      ? {
+          conversationId: activeId,
+          // For a locked conversation, present the hash of the PIN that
+          // unlocked it this session. The raw PIN stays in memory only.
+          pinHash:
+            activeConversation?.isLocked && unlockedFor?.id === activeId
+              ? pinHash(activeConversation.pinSalt ?? "", unlockedFor.pin)
+              : undefined,
+        }
+      : "skip",
   );
 
   const sendMessage = useAction(api.chat.sendMessage);
@@ -115,6 +159,9 @@ export default function Dashboard() {
   const deleteConversation = useMutation(api.chat.deleteConversation);
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const purgeGuestData = useMutation(api.chat.purgeGuestData);
+  const setLockMutation = useMutation(api.chat.setConversationLock);
+  const removeLockMutation = useMutation(api.chat.removeConversationLock);
+  const verifyLockMutation = useMutation(api.chat.verifyConversationLock);
 
   // Anonymous "Continue as Guest" sessions never save history: their chats
   // are wiped when the guest leaves, and each fresh guest session (new tab)
@@ -177,6 +224,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (activeId && activeConversation === null) {
       setActiveId(null);
+      setUnlockedFor(null);
       setInput("");
     }
   }, [activeId, activeConversation]);
@@ -214,6 +262,87 @@ export default function Dashboard() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isThinking, activeId]);
 
+  // ---- Chat lock handlers ----
+  const activeIsLocked = activeConversation?.isLocked === true;
+  const activeIsUnlocked =
+    activeIsLocked && unlockedFor?.id === activeId;
+
+  const handleLockChat = async () => {
+    if (!activeId || !activeConversation) return;
+    if (lockPin.length < 4 || lockPin !== lockPinConfirm) {
+      toast.error(
+        lockPin !== lockPinConfirm
+          ? "PINs don't match"
+          : "PIN must be at least 4 characters",
+      );
+      return;
+    }
+    setIsSettingLock(true);
+    try {
+      const salt = randomSalt();
+      const hash = pinHash(salt, lockPin);
+      await setLockMutation({
+        conversationId: activeId,
+        salt,
+        hash,
+        hint: lockHint.trim() || undefined,
+      });
+      // Treat the just-locked chat as unlocked for this session so the user
+      // keeps reading seamlessly.
+      setUnlockedFor({ id: activeId, pin: lockPin });
+      toast.success("Chat locked — it will ask for your PIN next time");
+      setLockDialogOpen(false);
+      setLockPin("");
+      setLockPinConfirm("");
+      setLockHint("");
+    } catch (error) {
+      console.error("Lock failed:", error);
+      toast.error("Could not lock this chat");
+    } finally {
+      setIsSettingLock(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!activeId || !activeConversation) return;
+    setIsUnlocking(true);
+    setUnlockError(false);
+    try {
+      const hash = pinHash(activeConversation.pinSalt ?? "", unlockInput);
+      const ok = await verifyLockMutation({ conversationId: activeId, hash });
+      if (!ok) {
+        setUnlockError(true);
+        return;
+      }
+      setUnlockedFor({ id: activeId, pin: unlockInput });
+      setUnlockInput("");
+    } catch (error) {
+      console.error("Unlock failed:", error);
+      setUnlockError(true);
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
+
+  const handleRemoveLock = async () => {
+    if (!activeId || !activeConversation) return;
+    setIsRemovingLock(true);
+    try {
+      await removeLockMutation({
+        conversationId: activeId,
+        hash: pinHash(activeConversation.pinSalt ?? "", removePin),
+      });
+      toast.success("Chat lock removed");
+      setRemoveDialogOpen(false);
+      setRemovePin("");
+    } catch (error) {
+      console.error("Remove lock failed:", error);
+      toast.error("Incorrect PIN");
+    } finally {
+      setIsRemovingLock(false);
+    }
+  };
+
   const handleModeChange = (mode: Mode) => {
     setPendingMode(mode);
     // A conversation is locked to the mode it was created in. Switching minds
@@ -222,6 +351,7 @@ export default function Dashboard() {
     // bleed into each other.
     if (activeConversation && mode !== activeConversation.mode) {
       setActiveId(null);
+      setUnlockedFor(null);
       setInput("");
       setAttachments((prev) => {
         prev.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
@@ -237,6 +367,12 @@ export default function Dashboard() {
     setIsThinking(true);
     setInput("");
     try {
+      // Locked conversations verify the PIN on every send (hash only — the
+      // raw PIN never leaves this device).
+      const activePinHash =
+        activeConversation?.isLocked && unlockedFor?.id === activeId
+          ? pinHash(activeConversation.pinSalt ?? "", unlockedFor.pin)
+          : undefined;
       // For a brand-new chat, create the conversation up front and select it
       // immediately so the streaming reply is visible while it's generated,
       // instead of only appearing after the whole action finishes.
@@ -250,6 +386,7 @@ export default function Dashboard() {
         mode: activeMode,
         content,
         fast: fastMode,
+        ...(activePinHash ? { pinHash: activePinHash } : {}),
         ...(attachments.length > 0
           ? {
               attachments: attachments.map(
@@ -385,6 +522,7 @@ export default function Dashboard() {
 
   const handleNewChat = () => {
     setActiveId(null);
+    setUnlockedFor(null);
     setPendingMode(historyFilter === "all" ? "general" : historyFilter);
     setInput("");
     setSidebarOpen(false);
@@ -540,6 +678,9 @@ export default function Dashboard() {
                         : "hover:bg-sidebar-accent/60",
                     )}
                     onClick={() => {
+                      // Switching conversations ends any active unlock —
+                      // the next locked chat always asks for its PIN.
+                      setUnlockedFor(null);
                       setActiveId(conversation._id);
                       setSidebarOpen(false);
                     }}
@@ -552,10 +693,18 @@ export default function Dashboard() {
                       }}
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium">
-                        {conversation.title === "New chat"
-                          ? "New conversation"
-                          : conversation.title}
+                      <p className="flex items-center gap-1.5 truncate text-[13px] font-medium">
+                        <span className="truncate">
+                          {conversation.title === "New chat"
+                            ? "New conversation"
+                            : conversation.title}
+                        </span>
+                        {conversation.isLocked && (
+                          <Lock
+                            className="size-3 shrink-0 text-[var(--mode-hacking)]"
+                            aria-label="PIN-locked"
+                          />
+                        )}
                       </p>
                       <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
                         <span
@@ -738,6 +887,58 @@ export default function Dashboard() {
                 </div>
               </>
             )}
+            {/* Lock/unlock the active conversation. Unlocked state is
+                session-only — one tap re-hides the chat. */}
+            {activeConversation && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "size-9 transition-colors",
+                  activeIsLocked
+                    ? activeIsUnlocked
+                      ? "text-amber-400 hover:text-amber-300"
+                      : "text-[var(--mode-hacking)]"
+                    : "text-muted-foreground hover:text-[var(--mode-hacking)]",
+                )}
+                onClick={() => {
+                  if (!activeIsLocked) {
+                    setLockPin("");
+                    setLockPinConfirm("");
+                    setLockHint("");
+                    setLockDialogOpen(true);
+                  } else if (activeIsUnlocked) {
+                    // Re-hide immediately.
+                    setUnlockedFor(null);
+                  } else {
+                    document
+                      .getElementById("chat-lock-pin")
+                      ?.focus();
+                  }
+                }}
+                title={
+                  activeIsLocked
+                    ? activeIsUnlocked
+                      ? "Hide again (re-lock)"
+                      : "This chat is PIN-locked"
+                    : "Lock this chat with a PIN"
+                }
+                aria-label={
+                  activeIsLocked
+                    ? activeIsUnlocked
+                      ? "Hide again (re-lock)"
+                      : "This chat is PIN-locked"
+                    : "Lock this chat with a PIN"
+                }
+              >
+                {activeIsLocked && activeIsUnlocked ? (
+                  <LockOpen className="size-4" />
+                ) : (
+                  <Lock className="size-4" />
+                )}
+              </Button>
+            )}
             {activeConversation && (
               <Button
                 type="button"
@@ -769,6 +970,88 @@ export default function Dashboard() {
             <div className="flex h-full items-center justify-center">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
+          ) : activeIsLocked && !activeIsUnlocked ? (
+            /* PIN gate: the server returns no messages until the hash matches,
+               so this screen is cosmetic — nothing leaks even if it were bypassed. */
+            <div className="flex min-h-full items-center justify-center px-5 py-10">
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className="w-full max-w-sm text-center"
+              >
+                <div
+                  className="mx-auto flex size-16 items-center justify-center rounded-2xl border bg-card shadow-xl"
+                  style={{
+                    borderColor: "var(--mode-hacking)40",
+                    boxShadow: "0 16px 40px -16px var(--mode-hacking)66",
+                  }}
+                >
+                  <ShieldCheck
+                    className="size-7 text-[var(--mode-hacking)]"
+                    strokeWidth={2}
+                  />
+                </div>
+                <h2 className="mt-5 text-xl font-bold tracking-tight">
+                  This chat is locked
+                </h2>
+                <p className="mx-auto mt-2 max-w-xs text-[13px] leading-5 text-muted-foreground">
+                  {activeConversation?.pinHint
+                    ? `Hint: ${activeConversation.pinHint}`
+                    : "Enter the PIN you set for this conversation to view it."}
+                </p>
+                <div className="mt-5 flex items-center gap-2">
+                  <Input
+                    id="chat-lock-pin"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="Enter PIN"
+                    value={unlockInput}
+                    onChange={(e) => {
+                      setUnlockInput(e.target.value);
+                      setUnlockError(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleUnlock();
+                    }}
+                    className={cn(
+                      "h-11 flex-1 rounded-xl text-center text-lg tracking-[0.3em]",
+                      unlockError && "border-destructive focus-visible:ring-destructive/30",
+                    )}
+                    aria-invalid={unlockError}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="size-11 shrink-0 rounded-xl"
+                    style={{
+                      background: "var(--mode-hacking)",
+                      color: "#0e1116",
+                      boxShadow: "0 6px 20px -8px var(--mode-hacking)aa",
+                    }}
+                    disabled={!unlockInput || isUnlocking}
+                    onClick={handleUnlock}
+                    aria-label="Unlock chat"
+                  >
+                    {isUnlocking ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <LockOpen className="size-4" />
+                    )}
+                  </Button>
+                </div>
+                {unlockError && (
+                  <p className="mt-2.5 text-[12.5px] font-medium text-destructive">
+                    Incorrect PIN — try again.
+                  </p>
+                )}
+                <p className="mt-6 text-[11.5px] leading-5 text-muted-foreground/60">
+                  The unlock lasts until you leave this chat or reload. To remove
+                  the lock entirely, open the lock menu in the header.
+                </p>
+              </motion.div>
+            </div>
           ) : showEmptyState ? (
             <EmptyState
               mode={activeMode}
@@ -794,7 +1077,12 @@ export default function Dashboard() {
         </div>
 
         {/* ---------- Composer ---------- */}
-        <div className="border-t border-border/70 bg-background/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-8 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div
+          className={cn(
+            "border-t border-border/70 bg-background/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-8 sm:pb-[max(1rem,env(safe-area-inset-bottom))]",
+            activeIsLocked && !activeIsUnlocked && "hidden",
+          )}
+        >
           <div className="mx-auto max-w-[42rem]">
             <div
               className={cn(
@@ -945,6 +1233,138 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {/* ---------- Set chat lock dialog ---------- */}
+      <Dialog open={lockDialogOpen} onOpenChange={setLockDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] rounded-2xl sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="size-4 text-[var(--mode-hacking)]" />
+              Lock this chat
+            </DialogTitle>
+            <DialogDescription>
+              Pick a 4-24 character PIN. Your PIN is hashed on this device and
+              never sent to the server. You'll need it every time you open
+              this chat again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Input
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              placeholder="New PIN (min 4 characters)"
+              value={lockPin}
+              onChange={(e) => setLockPin(e.target.value)}
+              className="h-11 rounded-xl"
+            />
+            <Input
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              placeholder="Confirm PIN"
+              value={lockPinConfirm}
+              onChange={(e) => setLockPinConfirm(e.target.value)}
+              className="h-11 rounded-xl"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && lockPin && lockPinConfirm) {
+                  handleLockChat();
+                }
+              }}
+            />
+            <Input
+              type="text"
+              placeholder="Optional hint (e.g. my birthday)"
+              value={lockHint}
+              onChange={(e) => setLockHint(e.target.value)}
+              className="h-11 rounded-xl"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" className="flex-1 sm:flex-none">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              disabled={lockPin.length < 4 || lockPin !== lockPinConfirm || isSettingLock}
+              onClick={handleLockChat}
+              className="flex-1 gap-2 bg-[var(--mode-hacking)] font-semibold text-background hover:brightness-110 sm:flex-none"
+            >
+              {isSettingLock ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Lock className="size-4" />
+              )}
+              Lock chat
+            </Button>
+            {activeIsLocked && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setLockDialogOpen(false);
+                  setRemovePin("");
+                  setRemoveDialogOpen(true);
+                }}
+              >
+                Remove lock…
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------- Remove chat lock dialog ---------- */}
+      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] rounded-2xl sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove chat lock</DialogTitle>
+            <DialogDescription>
+              Enter the current PIN to remove the lock from this conversation.
+              Anyone with the account will be able to read it again.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="Current PIN"
+            value={removePin}
+            onChange={(e) => setRemovePin(e.target.value)}
+            className="h-11 rounded-xl"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && removePin && !isRemovingLock) {
+                handleRemoveLock();
+              }
+            }}
+          />
+          <DialogFooter className="gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" className="flex-1 sm:flex-none">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!removePin || isRemovingLock}
+              onClick={handleRemoveLock}
+              className="flex-1 sm:flex-none"
+            >
+              {isRemovingLock ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              Remove lock
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ---------- Delete confirm ---------- */}
       <AlertDialog

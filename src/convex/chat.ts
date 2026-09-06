@@ -511,6 +511,10 @@ export const sendMessage = action({
       throw new Error("Incorrect PIN");
     }
 
+    // The getMessages call below uses the same hash so a locked conversation
+    // still returns its history — otherwise the model would see an empty
+    // context and answer every follow-up as if the chat were brand new.
+
     // Resolve attachment storage ids to public URLs.
     const attachments = await Promise.all(
       (args.attachments ?? []).map(async (attachment) => {
@@ -556,6 +560,7 @@ export const sendMessage = action({
     // context.
     const allMessages = await ctx.runQuery(api.chat.getMessages, {
       conversationId,
+      pinHash: args.pinHash,
     });
     const history: ChatMessage[] = (allMessages ?? [])
       // Legacy rows (pre-mode) are included; everything else must match the

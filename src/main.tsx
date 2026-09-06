@@ -5,7 +5,7 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import React, { StrictMode, useEffect, lazy, Suspense, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
@@ -81,9 +81,73 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+// Vite inlines this at build time — it must exist on the hosting provider
+// (Vercel → Settings → Environment Variables) BEFORE the deploy runs.
+const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 
+/** Visible fallback for a missing Convex URL. Previously a missing URL threw
+ *  at import time (inside the ConvexReactClient constructor) and rendered a
+ *  completely blank page with no hint of what was wrong. */
+function ConvexUrlMissingScreen() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background p-6 text-center text-foreground">
+      <h1 className="text-xl font-bold tracking-tight">
+        Backend connection not configured
+      </h1>
+      <p className="max-w-md text-sm leading-6 text-muted-foreground">
+        The{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[13px]">
+          VITE_CONVEX_URL
+        </code>{" "}
+        environment variable is missing on this deployment. Add it in your
+        host's environment variables (Vercel → Settings → Environment
+        Variables) and redeploy.
+      </p>
+    </div>
+  );
+}
 
+/** Holds the Convex client and the full provider tree once the URL is known. */
+function AppRoot() {
+  // Created exactly once; null when the deployment is misconfigured.
+  const convex = useMemo(
+    () => (convexUrl ? new ConvexReactClient(convexUrl) : null),
+    [],
+  );
+
+  if (!convex) {
+    return <ConvexUrlMissingScreen />;
+  }
+
+  return (
+    <ConvexAuthProvider client={convex}>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <BrowserRouter>
+          <RouteSyncer />
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route
+                path="/auth"
+                element={<AuthPage redirectAfterAuth="/dashboard" />}
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <RequireAuth>
+                    <Dashboard />
+                  </RequireAuth>
+                }
+              />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+        <Toaster />
+      </ThemeProvider>
+    </ConvexAuthProvider>
+  );
+}
 
 function RouteSyncer() {
   const location = useLocation();
@@ -115,32 +179,7 @@ createRoot(document.getElementById("root")!).render(
       <ToolbarErrorBoundary>
         <VlyToolbar />
       </ToolbarErrorBoundary>
-      <ConvexAuthProvider client={convex}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <RequireAuth>
-                    <Dashboard />
-                  </RequireAuth>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Toaster />
-        </ThemeProvider>
-      </ConvexAuthProvider>
+      <AppRoot />
     </RootErrorBoundary>
   </StrictMode>,
 );

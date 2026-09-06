@@ -893,9 +893,8 @@ export default function Dashboard() {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
                 className={cn(
-                  "size-9 transition-colors",
+                  "h-9 shrink-0 gap-1.5 rounded-full px-2.5 transition-colors sm:px-3",
                   activeIsLocked
                     ? activeIsUnlocked
                       ? "text-amber-400 hover:text-amber-300"
@@ -937,6 +936,13 @@ export default function Dashboard() {
                 ) : (
                   <Lock className="size-4" />
                 )}
+                <span className="hidden text-[12px] font-semibold sm:inline">
+                  {activeIsLocked
+                    ? activeIsUnlocked
+                      ? "Re-lock"
+                      : "Locked"
+                    : "Lock"}
+                </span>
               </Button>
             )}
             {activeConversation && (

@@ -21,22 +21,34 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { useAuth } from "@/hooks/use-auth";
-import {
+import { useAuth } from "@/hooks/use-auth";import {
   GENERAL_SUGGESTIONS,
   HACKING_SUGGESTIONS,
   MODE_META,
   type Mode,
 } from "@/lib/modes";
+import { GENERAL_MODELS, generalModelLabel } from "@/convex/schema";
+import {
+  GENERAL_MODELS,
+  DEFAULT_GENERAL_MODEL,
+  type GeneralModel,
+} from "@/convex/schema";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Check,
+  ChevronsUpDown,
   FileText,
   Loader2,
   Lock,
@@ -132,6 +144,34 @@ export default function Dashboard() {
       return false;
     }
   });
+  const [selectedModel, setSelectedModel] = useState<GeneralModel>(() => {
+    try {
+      const stored = localStorage.getItem("twinmind-general-model");
+      if (stored && stored in GENERAL_MODELS) return stored as GeneralModel;
+    } catch {
+      /* storage unavailable */
+    }
+    return DEFAULT_GENERAL_MODEL;
+  });
+  const [popoverOpen, popoverSetOpen] = useState(false);
+
+  // General-mode model picker: which Gemini model this conversation uses in
+  // General mode. Persisted per-conversation on the server; falls back to the
+  // site default (same as the existing GEMINI_MODEL default) when nothing is
+  // pinned yet. Only meaningful in General mode; Hacking conversations ignore
+  // it (Hacking always uses Groq).
+  const [generalModelOpen, setGeneralModelOpen] = useState(false);
+  const [currentGeneralModel, setCurrentGeneralModel] = useState<
+    (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS] | undefined
+  >(() => {
+    try {
+      return (
+        activeConversation?.generalModel ?? DEFAULT_GENERAL_MODEL
+      ) as (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS];
+    } catch {
+      return undefined;
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
@@ -160,6 +200,8 @@ export default function Dashboard() {
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const purgeGuestData = useMutation(api.chat.purgeGuestData);
   const setLockMutation = useMutation(api.chat.setConversationLock);
+  const touchConversation = useMutation(api.chat.touchConversation);
+  const touchConversation = useMutation(api.chat.touchConversation);
   const removeLockMutation = useMutation(api.chat.removeConversationLock);
   const verifyLockMutation = useMutation(api.chat.verifyConversationLock);
 
@@ -249,14 +291,15 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Remember the Fast-mode preference across visits.
+  // Remember the Fast-mode and General-model preferences across visits.
   useEffect(() => {
     try {
       localStorage.setItem("twinmind-fast-mode", fastMode ? "1" : "0");
+      localStorage.setItem("twinmind-general-model", selectedModel);
     } catch {
-      // storage unavailable — the preference just won't persist
+      // storage unavailable — the preferences just won't persist
     }
-  }, [fastMode]);
+  }, [fastMode, selectedModel]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -343,6 +386,31 @@ export default function Dashboard() {
     }
   };
 
+  /** When the user picks a different General-model in the header popover,
+   *  persist it to the conversation and refresh local state. For a fresh/new
+   *  chat we create the conversation first so the model is stored on it rather
+   *  than being lost. */
+  const handleGeneralModelChange = async (model: string) => {
+    setGeneralModelOpen(false);
+    if (activeMode !== "general") return;
+    if (!activeId) {
+      const id = await createConversation({ mode: "general", generalModel: model });
+      setActiveId(id as Id<"conversations">);
+      setCurrentGeneralModel(model as (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS]);
+      return;
+    }
+    try {
+      await touchConversation({
+        conversationId: activeId,
+        generalModel: model as (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS],
+      });
+      setCurrentGeneralModel(model as (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS]);
+    } catch (error) {
+      console.error("Save model failed:", error);
+      toast.error("Could not save model choice");
+    }
+  };
+
   const handleModeChange = (mode: Mode) => {
     setPendingMode(mode);
     // A conversation is locked to the mode it was created in. Switching minds
@@ -384,9 +452,9 @@ export default function Dashboard() {
       const result = await sendMessage({
         conversationId,
         mode: activeMode,
-        content,
-        fast: fastMode,
-        ...(activePinHash ? { pinHash: activePinHash } : {}),
+        content,              fast: fastMode,
+              generalModel: activeMode === "general" ? selectedModel : undefined,
+              ...(activePinHash ? { pinHash: activePinHash } : {}),
         ...(attachments.length > 0
           ? {
               attachments: attachments.map(
@@ -817,6 +885,74 @@ export default function Dashboard() {
             )}
           </div>
           <div className="ml-auto flex items-center gap-1">
+            {activeMode === "general" && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition-colors sm:flex",
+                      "sm:inline-flex",
+                      selectedModel === GENERAL_MODELS["Gemini Flash"]
+                        ? "border-border/70 bg-card/70 text-muted-foreground"
+                        : "border-border/70 bg-card/70 text-foreground",
+                    )}
+                    aria-label="Change General-model model"
+                  >
+                    <span className="hidden sm:inline">
+                      {selectedModel === GENERAL_MODELS["Gemini Flash Lite"]
+                        ? "Flash Lite"
+                        : selectedModel === GENERAL_MODELS["Gemini 2.5 Flash"]
+                          ? "2.5 Flash"
+                          : "Flash"}
+                    </span>
+                    <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0 sm:w-72" align="end">
+                  <div className="px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Model
+                    </p>
+                  </div>
+                  <div className="-mx-1">
+                    {(Object.entries(GENERAL_MODELS) as [string, GeneralModel][]).map(
+                      ([label, value]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel(value);
+                            popoverSetOpen(false);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                            selectedModel === value
+                              ? "bg-[var(--mode-general)]/10 text-[var(--mode-general)] font-semibold"
+                              : "text-foreground/80 hover:bg-muted/60",
+                          )}
+                        >
+                          {selectedModel === value && (
+                            <Check className="size-4 shrink-0" />
+                          )}
+                          <span className="flex flex-col">
+                            <span className="font-medium">{label}</span>
+                            <span className="text-[11px] text-muted-foreground/70 font-normal">
+                              {value}
+                            </span>
+                          </span>
+                        </button>
+                      ),
+                    )}
+                  </div>
+                  <div className="border-t border-border/70 px-3 py-2">
+                    <p className="text-[11px] leading-5 text-muted-foreground">
+                      Each chat remembers its model. Change it here and it sticks.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
             {isGuest && (
               <span
                 className="hidden items-center gap-1 rounded-full border border-dashed border-border/70 bg-card/60 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground sm:flex"
@@ -886,6 +1022,69 @@ export default function Dashboard() {
                   />
                 </div>
               </>
+            )}
+            {activeMode === "general" && (
+              <Popover open={generalModelOpen} onOpenChange={setGeneralModelOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={cn(
+                      "h-9 shrink-0 gap-1.5 rounded-full px-2.5 transition-colors sm:px-3",
+                      currentGeneralModel !== DEFAULT_GENERAL_MODEL
+                        ? "text-[var(--mode-general)]"
+                        : "text-muted-foreground hover:text-[var(--mode-general)]",
+                    )}
+                    aria-label="Change General model"
+                    title={currentGeneralModel
+                      ? `Current model: ${generalModelLabel(currentGeneralModel)}`
+                      : "Change General model"}
+                  >
+                    <Cpu className="size-4" />
+                    <span className="hidden text-[12px] font-semibold sm:inline">
+                      {currentGeneralModel
+                        ? generalModelLabel(currentGeneralModel)
+                        : "Model"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[22rem] rounded-2xl p-1.5" align="end">
+                  <div className="space-y-0.5">
+                    {Object.entries(GENERAL_MODELS).map(([label, value]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleGeneralModelChange(value)}
+                        className={cn(
+                          "flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
+                          currentGeneralModel === value
+                            ? "bg-[var(--mode-general)]/10 text-[var(--mode-general)] font-semibold"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <Cpu
+                          className={cn(
+                            "size-4 shrink-0",
+                            currentGeneralModel === value
+                              ? "fill-[var(--mode-general)]/25"
+                              : "text-muted-foreground/60",
+                          )}
+                        />
+                        <span className="flex flex-col">
+                          <span className="font-medium">{label}</span>
+                          <span className="text-[11px] text-muted-foreground/70">
+                            {value}
+                          </span>
+                        </span>
+                        {currentGeneralModel === value && (
+                          <Check className="ml-auto size-4 shrink-0 text-[var(--mode-general)]" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <PopoverArrow className="border-border/70 fill-background" />
+                </PopoverContent>
+              </Popover>
             )}
             {/* Lock/unlock the active conversation. Unlocked state is
                 session-only — one tap re-hides the chat. */}

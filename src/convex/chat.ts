@@ -16,7 +16,13 @@ import {
   query,
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import { MODES, modeValidator, type Mode } from "./schema";
+import {
+  MODES,
+  modeValidator,
+  generalModelValidator,
+  DEFAULT_GENERAL_MODEL,
+  type Mode,
+} from "./schema";
 import {
   generateChatCompletion,
   isRomoniCommand,
@@ -65,6 +71,21 @@ export const getConversation = query({
   },
 });
 
+/** One-off helper for the General-model popover: returns the readable label
+ *  of the model currently pinned to a conversation (or the site's default).
+ *  Only meaningful for General-mode conversations. */
+export const getConversationGeneralModel = query({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, { conversationId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation || conversation.userId !== userId) return null;
+    if (conversation.mode !== MODES.GENERAL) return null;
+    return conversation.generalModel ?? DEFAULT_GENERAL_MODEL;
+  },
+});
+
 export const getMessages = query({
   args: {
     conversationId: v.id("conversations"),
@@ -102,14 +123,15 @@ export const generateUploadUrl = mutation({
 });
 
 export const createConversation = mutation({
-  args: { mode: modeValidator },
-  handler: async (ctx, { mode }) => {
+  args: { mode: modeValidator, generalModel: v.optional(generalModelValidator) },
+  handler: async (ctx, { mode, generalModel }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Not authenticated");
     return ctx.db.insert("conversations", {
       userId,
       title: "New chat",
       mode,
+      ...(generalModel !== undefined ? { generalModel } : {}),
       updatedAt: Date.now(),
     });
   },
@@ -120,8 +142,9 @@ export const touchConversation = mutation({
     conversationId: v.id("conversations"),
     title: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
+    generalModel: v.optional(generalModelValidator),
   },
-  handler: async (ctx, { conversationId, title, updatedAt }) => {
+  handler: async (ctx, { conversationId, title, updatedAt, generalModel }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Not authenticated");
     const conversation = await ctx.db.get(conversationId);
@@ -131,6 +154,7 @@ export const touchConversation = mutation({
     await ctx.db.patch(conversationId, {
       ...(title !== undefined ? { title } : {}),
       ...(updatedAt !== undefined ? { updatedAt } : {}),
+      ...(generalModel !== undefined ? { generalModel } : {}),
     });
   },
 });
@@ -447,6 +471,10 @@ export const sendMessage = action({
     mode: modeValidator,
     content: v.string(),
     fast: v.optional(v.boolean()),
+    // General-mode model picker: when set (only meaningful in General mode),
+    // this conversation uses that Gemini model instead of the site default.
+    // The backend's fallback chain still protects against retired models.
+    generalModel: v.optional(generalModelValidator),
     // Chat-lock: required when the target conversation is PIN-locked.
     pinHash: v.optional(v.string()),
     attachments: v.optional(
@@ -538,7 +566,8 @@ export const sendMessage = action({
         : {}),
     });
 
-    // Auto-title the conversation from the first message.
+    // Auto-title the conversation from the first message, and persist any
+    // General-model change the user made in the header popover.
     const title =
       romoniCommand
         ? args.mode === MODES.HACKING
@@ -553,6 +582,9 @@ export const sendMessage = action({
       conversationId,
       title,
       updatedAt: Date.now(),
+      ...(args.generalModel !== undefined && args.mode === MODES.GENERAL
+        ? { generalModel: args.generalModel }
+        : {}),
     });
 
     // Build recent history for context (oldest -> newest), filtered to the
@@ -643,9 +675,20 @@ export const sendMessage = action({
       return Promise.resolve();
     };
 
-    const result = await generateChatCompletion(args.mode, history, flush, {
-      fast: args.fast === true,
-    });
+    const result = await generateChatCompletion(
+      args.mode,
+      history,
+      flush,
+      {
+        fast: args.fast === true,
+        // When the user picked a specific Gemini model for this conversation,
+        // try it first — the generator's fallback chain still protects against
+        // retired models, so this is a preference not a hard constraint.
+        ...(args.mode === MODES.GENERAL && args.generalModel
+          ? { model: args.generalModel }
+          : {}),
+      },
+    );
     // Always land the final text (or an error message) in the database, even
     // if the stream died partway through.
     await flush(

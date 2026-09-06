@@ -354,10 +354,16 @@ function geminiPreferredModel(fast: boolean): string {
   return configured || "gemini-3.5-flash";
 }
 
-/** Candidate models for General mode: the preferred model first, then the
- *  fallback chain. Tried in order until one responds. */
-function geminiModels(fast: boolean): string[] {
-  return [...new Set([geminiPreferredModel(fast), ...GEMINI_MODEL_FALLBACKS])];
+/** Candidate models for General mode: the user's explicit pick first (if
+ *  any), then the preferred model for Fast/standard, then the fallback chain.
+ *  Tried in order until one responds — so a user-picked model that gets
+ *  retired by Google is only the first thing we attempt, not the only thing. */
+function geminiModels(fast: boolean, preferredModel?: string): string[] {
+  const base = [...new Set([geminiPreferredModel(fast), ...GEMINI_MODEL_FALLBACKS])];
+  if (!preferredModel) return base;
+  // Put the user's choice first but dedup so the fallback chain still appears
+  // after it.
+  return [preferredModel, ...base.filter((m) => m !== preferredModel)];
 }
 
 /** All configured Gemini API keys — from GEMINI_API_KEYS (comma-separated),
@@ -385,17 +391,22 @@ let geminiCursor = 0;
  *
  *  Key resilience: keys are rotated round-robin across requests; a
  *  rate-limited (429), unauthorized (401), or errored (5xx) key fails over to
- *  the next one, and retired models walk the fallback chain. */
+ *  the next one, and retired models walk the fallback chain.
+ *
+ *  Model preference: `preferredModel` (from the chat header's General-model
+ *  picker) is tried first. If it doesn't exist/works, we walk the site's
+ *  fallback chain — so this is a preference, not a hard constraint. */
 async function generateGemini(
   systemPrompt: string,
   history: ChatMessage[],
   onDelta?: (text: string) => void | Promise<void>,
   fast = false,
+  preferredModel?: string,
 ): Promise<CompletionResult> {
   const keys = geminiApiKeys();
   if (keys.length === 0) return { ok: false, error: "missing-key" };
 
-  const models = geminiModels(fast);
+  const models = geminiModels(fast, preferredModel);
   let lastError: unknown = null;
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const apiKey = keys[(geminiCursor + attempt) % keys.length];
@@ -507,15 +518,26 @@ async function generateGroq(
 /** Generate a reply for the given mode, streaming the provider's tokens to
  *  onDelta (full text so far) as they arrive. `fast` only affects General
  *  mode — it swaps in the lighter, quicker Gemini model. Hacking mode always
- *  uses Groq and ignores it. */
+ *  uses Groq and ignores it.
+ *
+ *  `preferredModel` is an optional General-mode model the user picked in the
+ *  chat header. It's tried first; if it's retired or unavailable, the call
+ *  walks the normal Gemini fallback chain automatically — so picking a model
+ *  is a preference, never a hard constraint. */
 export async function generateChatCompletion(
   mode: Mode,
   history: ChatMessage[],
   onDelta?: (text: string) => void | Promise<void>,
-  options: { fast?: boolean } = {},
+  options: { fast?: boolean; model?: string } = {},
 ): Promise<CompletionResult> {
   const systemPrompt = systemPromptFor(mode);
   return mode === MODES.HACKING
     ? generateGroq(systemPrompt, history, onDelta)
-    : generateGemini(systemPrompt, history, onDelta, options.fast === true);
+    : generateGemini(
+        systemPrompt,
+        history,
+        onDelta,
+        options.fast === true,
+        options.model,
+      );
 }

@@ -8,7 +8,6 @@ export const ROLES = {
   USER: "user",
   MEMBER: "member",
 } as const;
-
 export const roleValidator = v.union(
   v.literal(ROLES.ADMIN),
   v.literal(ROLES.USER),
@@ -21,12 +20,38 @@ export const MODES = {
   GENERAL: "general",
   HACKING: "hacking",
 } as const;
-
 export const modeValidator = v.union(
   v.literal(MODES.GENERAL),
   v.literal(MODES.HACKING),
 );
 export type Mode = Infer<typeof modeValidator>;
+
+// Built-in Gemini models available in the General-model popover. These are
+// the models users can pick from in the UI; the backend's fallback chain
+// protects against any model that gets retired by Google, so this list is the
+// surface the user sees rather than a hard runtime restriction.
+export const GENERAL_MODELS = {
+  "Gemini Flash": "gemini-3.5-flash",
+  "Gemini Flash Lite": "gemini-3.1-flash-lite",
+  "Gemini 2.5 Flash": "gemini-2.5-flash",
+} as const;
+
+export const generalModelValidator = v.union(
+  v.literal(GENERAL_MODELS["Gemini Flash"]),
+  v.literal(GENERAL_MODELS["Gemini Flash Lite"]),
+  v.literal(GENERAL_MODELS["Gemini 2.5 Flash"]),
+);
+export type GeneralModel = Infer<typeof generalModelValidator>;
+
+/** Default General-model if the caller doesn't specify one. Mirrors the
+ *  existing `GEMINI_MODEL` default so the feature is opt-in. */
+export const DEFAULT_GENERAL_MODEL = GENERAL_MODELS["Gemini Flash"];
+
+/** Human-readable label for a General-model value, used by the header popover.
+ *  Keep in sync with `GENERAL_MODELS`. */
+export function generalModelLabel(model: GeneralModel | string): string {
+  return Object.entries(GENERAL_MODELS).find(([, value]) => value === model)?.[0] ?? model;
+}
 
 // File/image attachment metadata stored on user messages.
 export const attachmentValidator = v.object({
@@ -60,6 +85,10 @@ const schema = defineSchema(
       title: v.string(),
       mode: modeValidator,
       updatedAt: v.number(),
+
+      // When this is set it pins the General-mode model for this conversation.
+      // Hacking-mode conversations ignore it (Hacking always uses Groq).
+      generalModel: v.optional(generalModelValidator),
 
       // Chat lock: when pinHash is set the conversation's messages are only
       // returned/sent when the caller presents the matching PIN hash.

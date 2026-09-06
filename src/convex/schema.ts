@@ -60,6 +60,15 @@ const schema = defineSchema(
       title: v.string(),
       mode: modeValidator,
       updatedAt: v.number(),
+
+      // Chat lock: when pinHash is set the conversation's messages are only
+      // returned/sent when the caller presents the matching PIN hash.
+      // The raw PIN never reaches the server — the client stores only
+      // sha256(pinSalt + ":" + pin). pinHint is an optional reminder shown
+      // on the lock screen.
+      pinSalt: v.optional(v.string()),
+      pinHash: v.optional(v.string()),
+      pinHint: v.optional(v.string()),
     }).index("by_user", ["userId", "updatedAt"]),
 
     // TwinMind chat messages

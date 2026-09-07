@@ -1,6 +1,12 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { Infer, v } from "convex/values";
+import {
+  DEFAULT_GENERAL_MODEL,
+  GENERAL_MODELS,
+  generalModelLabel,
+  type GeneralModel,
+} from "../lib/generalModels";
 
 // default user roles. can add / remove based on the project as needed
 export const ROLES = {
@@ -26,32 +32,20 @@ export const modeValidator = v.union(
 );
 export type Mode = Infer<typeof modeValidator>;
 
-// Built-in Gemini models available in the General-model popover. These are
-// the models users can pick from in the UI; the backend's fallback chain
-// protects against any model that gets retired by Google, so this list is the
-// surface the user sees rather than a hard runtime restriction.
-export const GENERAL_MODELS = {
-  "Gemini Flash": "gemini-3.5-flash",
-  "Gemini Flash Lite": "gemini-3.1-flash-lite",
-  "Gemini 2.5 Flash": "gemini-2.5-flash",
-} as const;
+// The General-mode model list lives in src/lib/generalModels.ts so the client
+// can import it without dragging Convex server code into the browser bundle.
+// Re-exported here for the backend functions that read it from ./schema.
+export { DEFAULT_GENERAL_MODEL, GENERAL_MODELS, generalModelLabel };
+export type { GeneralModel };
 
+// Validator mirrors GENERAL_MODELS — add a literal here when adding a model
+// there (e.g. the Astra / OpenAI entry).
 export const generalModelValidator = v.union(
   v.literal(GENERAL_MODELS["Gemini Flash"]),
   v.literal(GENERAL_MODELS["Gemini Flash Lite"]),
   v.literal(GENERAL_MODELS["Gemini 2.5 Flash"]),
+  v.literal(GENERAL_MODELS["Astra (GPT-6)"]),
 );
-export type GeneralModel = Infer<typeof generalModelValidator>;
-
-/** Default General-model if the caller doesn't specify one. Mirrors the
- *  existing `GEMINI_MODEL` default so the feature is opt-in. */
-export const DEFAULT_GENERAL_MODEL = GENERAL_MODELS["Gemini Flash"];
-
-/** Human-readable label for a General-model value, used by the header popover.
- *  Keep in sync with `GENERAL_MODELS`. */
-export function generalModelLabel(model: GeneralModel | string): string {
-  return Object.entries(GENERAL_MODELS).find(([, value]) => value === model)?.[0] ?? model;
-}
 
 // File/image attachment metadata stored on user messages.
 export const attachmentValidator = v.object({

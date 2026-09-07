@@ -37,13 +37,14 @@ const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 /** Model chain for General mode. First entry is used if GEMINI_MODEL is not
  *  set; the rest are fallbacks tried in order if a model is retired/not found.
- *  A user-set GEMINI_MODEL is always tried first. */
+ *  A user-set GEMINI_MODEL is always tried first.
+ *  Only live models are listed: "gemini-2.5-flash" (verified 404 in September
+ *  2026) and "gemini-2.0-flash" (shut down June 2026) were retired by Google
+ *  and removed — dead entries just cost a wasted 404 request per send. */
 const GEMINI_MODEL_FALLBACKS = [
   "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
 ];
 
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "qwen/qwen3.6-27b";

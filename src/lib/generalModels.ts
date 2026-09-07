@@ -6,7 +6,7 @@
 export const GENERAL_MODELS = {
   "Gemini Flash": "gemini-3.5-flash",
   "Gemini Flash Lite": "gemini-3.1-flash-lite",
-  "Gemini 2.5 Flash": "gemini-2.5-flash",
+  "Gemini 3.6 Flash": "gemini-3.6-flash",
 } as const;
 
 export type GeneralModel = (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS];
@@ -15,7 +15,8 @@ export type GeneralModel = (typeof GENERAL_MODELS)[keyof typeof GENERAL_MODELS];
 export const DEFAULT_GENERAL_MODEL: GeneralModel = GENERAL_MODELS["Gemini Flash"];
 
 /** Coerce a stored General-model id to one the picker still offers. Retired
- *  picks (e.g. the removed Astra / GPT-6 gateway, "gpt-6-astra") and unknown
+ *  picks (the removed Astra / GPT-6 gateway "gpt-6-astra", and Google's
+ *  retired "gemini-2.5-flash" — verified 404 in September 2026) and unknown
  *  values fall back to the default so old conversations keep working. */
 export function normalizeGeneralModel(
   model: string | null | undefined,

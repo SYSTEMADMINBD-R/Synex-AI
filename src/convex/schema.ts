@@ -39,13 +39,17 @@ export { DEFAULT_GENERAL_MODEL, GENERAL_MODELS, generalModelLabel };
 export type { GeneralModel };
 
 // Validator mirrors GENERAL_MODELS — add a literal here when adding a model
-// there. "gpt-6-astra" stays valid so conversations still pinned to the
-// retired Astra option remain schema-valid; they read as the default model.
+// there. Retired picks stay valid so conversations still pinned to them remain
+// schema-valid; they read as the default model:
+//   - "gpt-6-astra": Astra / GPT-6 option removed from the picker.
+//   - "gemini-2.5-flash": retired by Google (404, September 2026); replaced
+//     in the picker by "gemini-3.6-flash".
 export const generalModelValidator = v.union(
   v.literal(GENERAL_MODELS["Gemini Flash"]),
   v.literal(GENERAL_MODELS["Gemini Flash Lite"]),
-  v.literal(GENERAL_MODELS["Gemini 2.5 Flash"]),
+  v.literal(GENERAL_MODELS["Gemini 3.6 Flash"]),
   v.literal("gpt-6-astra"),
+  v.literal("gemini-2.5-flash"),
 );
 
 // File/image attachment metadata stored on user messages.

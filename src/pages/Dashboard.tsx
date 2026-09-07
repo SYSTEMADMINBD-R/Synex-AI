@@ -150,10 +150,6 @@ export default function Dashboard() {
   // is pinned yet the site default applies. Only meaningful in General mode —
   // Hacking conversations always use Groq and ignore it.
   const [generalModelOpen, setGeneralModelOpen] = useState(false);
-  const selectedModel: GeneralModel =
-    activeMode === "general"
-      ? (activeConversation?.generalModel ?? DEFAULT_GENERAL_MODEL)
-      : DEFAULT_GENERAL_MODEL;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
@@ -222,6 +218,14 @@ export default function Dashboard() {
   };
 
   const activeMode: Mode = activeConversation?.mode ?? pendingMode;
+  // General-mode model picker: which model this conversation uses in General
+  // mode. The per-conversation choice is stored on the server; when nothing
+  // is pinned yet the site default applies. Only meaningful in General mode —
+  // Hacking conversations always use Groq and ignore it.
+  const selectedModel: GeneralModel =
+    activeMode === "general"
+      ? (activeConversation?.generalModel ?? DEFAULT_GENERAL_MODEL)
+      : DEFAULT_GENERAL_MODEL;
   const accent = MODE_META[activeMode].accent;
   const ModeIcon = MODE_META[activeMode].icon;
 

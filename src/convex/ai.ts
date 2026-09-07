@@ -31,7 +31,6 @@
 import OpenAI, { APIError } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { MODES, type Mode } from "./schema";
-import { GENERAL_MODELS } from "../lib/generalModels";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
@@ -623,10 +622,11 @@ async function generateAstra(
  *  uses Groq and ignores both.
  *
  *  `model` is the optional General-mode model the user picked in the chat
- *  header. The "Astra (GPT-6)" pick routes to OpenAI's GPT-6 Astra with the
- *  ASTRA_/OPENAI_ keys (falling back to Gemini when that fails); every other
- *  pick is a Gemini preference — tried first, with the normal Gemini fallback
- *  chain after it — so picking a model is never a hard constraint. */
+ *  header. The retired "gpt-6-astra" pick (removed from the picker) still
+ *  routes to the ASTRA_/OPENAI_ keys when they are configured, falling back
+ *  to Gemini when that fails; every other pick is a Gemini preference — tried
+ *  first, with the normal Gemini fallback chain after it — so picking a model
+ *  is never a hard constraint. */
 export async function generateChatCompletion(
   mode: Mode,
   history: ChatMessage[],
@@ -637,7 +637,7 @@ export async function generateChatCompletion(
   if (mode === MODES.HACKING) {
     return generateGroq(systemPrompt, history, onDelta);
   }
-  if (options.model === GENERAL_MODELS["Astra (GPT-6)"]) {
+  if (options.model === "gpt-6-astra") {
     const astra = await generateAstra(systemPrompt, history, onDelta);
     if (astra.ok) return astra;
     console.error(
@@ -651,8 +651,6 @@ export async function generateChatCompletion(
     options.fast === true,
     // Don't re-try the Astra model id against Gemini's endpoint after a
     // fallback — go straight to the Gemini chain.
-    options.model === GENERAL_MODELS["Astra (GPT-6)"]
-      ? undefined
-      : options.model,
+    options.model === "gpt-6-astra" ? undefined : options.model,
   );
 }

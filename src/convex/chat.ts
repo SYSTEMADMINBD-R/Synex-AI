@@ -23,6 +23,7 @@ import {
   DEFAULT_GENERAL_MODEL,
   type Mode,
 } from "./schema";
+import { normalizeGeneralModel } from "../lib/generalModels";
 import {
   generateChatCompletion,
   isRomoniCommand,
@@ -82,7 +83,8 @@ export const getConversationGeneralModel = query({
     const conversation = await ctx.db.get(conversationId);
     if (!conversation || conversation.userId !== userId) return null;
     if (conversation.mode !== MODES.GENERAL) return null;
-    return conversation.generalModel ?? DEFAULT_GENERAL_MODEL;
+    // Retired picks (e.g. the removed Astra option) read as the default.
+    return normalizeGeneralModel(conversation.generalModel);
   },
 });
 

@@ -41,6 +41,7 @@ import {
   GENERAL_MODELS,
   DEFAULT_GENERAL_MODEL,
   generalModelLabel,
+  normalizeGeneralModel,
   type GeneralModel,
 } from "@/lib/generalModels";
 import { cn } from "@/lib/utils";
@@ -224,7 +225,7 @@ export default function Dashboard() {
   // Hacking conversations always use Groq and ignore it.
     const selectedModel: GeneralModel =
     activeMode === "general"
-      ? (activeConversation?.generalModel ?? DEFAULT_GENERAL_MODEL)
+      ? normalizeGeneralModel(activeConversation?.generalModel)
       : DEFAULT_GENERAL_MODEL;
   const accent = MODE_META[activeMode].accent;
   const ModeIcon = MODE_META[activeMode].icon;

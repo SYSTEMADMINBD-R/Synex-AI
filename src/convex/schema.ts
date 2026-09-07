@@ -39,12 +39,13 @@ export { DEFAULT_GENERAL_MODEL, GENERAL_MODELS, generalModelLabel };
 export type { GeneralModel };
 
 // Validator mirrors GENERAL_MODELS — add a literal here when adding a model
-// there (e.g. the Astra / OpenAI entry).
+// there. "gpt-6-astra" stays valid so conversations still pinned to the
+// retired Astra option remain schema-valid; they read as the default model.
 export const generalModelValidator = v.union(
   v.literal(GENERAL_MODELS["Gemini Flash"]),
   v.literal(GENERAL_MODELS["Gemini Flash Lite"]),
   v.literal(GENERAL_MODELS["Gemini 2.5 Flash"]),
-  v.literal(GENERAL_MODELS["Astra (GPT-6)"]),
+  v.literal("gpt-6-astra"),
 );
 
 // File/image attachment metadata stored on user messages.

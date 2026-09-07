@@ -222,7 +222,7 @@ export default function Dashboard() {
   // mode. The per-conversation choice is stored on the server; when nothing
   // is pinned yet the site default applies. Only meaningful in General mode —
   // Hacking conversations always use Groq and ignore it.
-  const selectedModel: GeneralModel =
+    const selectedModel: GeneralModel =
     activeMode === "general"
       ? (activeConversation?.generalModel ?? DEFAULT_GENERAL_MODEL)
       : DEFAULT_GENERAL_MODEL;

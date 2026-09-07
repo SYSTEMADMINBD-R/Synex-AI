@@ -849,7 +849,12 @@ export default function Dashboard() {
           >
             <Menu className="size-5" />
           </Button>
-          <ModeToggle value={activeMode} onChange={handleModeChange} size="sm" />
+          <ModeToggle
+            value={activeMode}
+            onChange={handleModeChange}
+            size="sm"
+            iconOnlyOnMobile
+          />
           <div className="ml-2 hidden min-w-0 sm:block">
             {activeConversation ? (
               <>

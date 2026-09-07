@@ -6,10 +6,13 @@ export function ModeToggle({
   value,
   onChange,
   size = "md",
+  iconOnlyOnMobile = false,
 }: {
   value: Mode;
   onChange: (mode: Mode) => void;
   size?: "sm" | "md";
+  /** Collapse to icons on phones (labels return at sm+) so tight headers fit. */
+  iconOnlyOnMobile?: boolean;
 }) {
   const modes = (Object.keys(MODE_META) as Mode[]).sort((a) =>
     a === "general" ? -1 : 1,
@@ -34,6 +37,7 @@ export function ModeToggle({
             type="button"
             role="tab"
             aria-selected={active}
+            aria-label={`${meta.label} mode`}
             onClick={() => onChange(mode)}
             className={cn(
               "relative z-10 inline-flex items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors duration-200 sm:px-4",
@@ -58,7 +62,9 @@ export function ModeToggle({
               className={size === "sm" ? "size-3.5" : "size-4"}
               strokeWidth={2.2}
             />
-            {meta.label}
+            <span className={cn(iconOnlyOnMobile && "hidden sm:inline")}>
+              {meta.label}
+            </span>
           </button>
         );
       })}

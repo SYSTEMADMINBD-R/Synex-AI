@@ -3,7 +3,12 @@
 //
 // Provider routing:
 //   - General mode runs on Gemini (GEMINI_API_KEY, model GEMINI_MODEL or
-//     GEMINI_FAST_MODEL when Fast mode is on)
+//     GEMINI_FAST_MODEL when Fast mode is on) — except when the user picks
+//     "Astra (GPT-6)" in the General-model picker. That model is OpenAI's
+//     flagship GPT-6 Astra, served by OpenAI's own API with ASTRA_API_KEY /
+//     ASTRA_API_KEYS (OPENAI_API_KEY works as an alias). If no Astra key is
+//     configured — or every Astra attempt fails — the request falls back to
+//     the normal Gemini path so General mode always answers.
 //   - Hacking mode runs on Groq   (GROQ_API_KEYS / GROQ_API_KEY, model GROQ_MODEL)
 //
 // Both Groq's and Gemini's APIs are OpenAI-compatible, so all providers share
@@ -26,6 +31,7 @@
 import OpenAI, { APIError } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { MODES, type Mode } from "./schema";
+import { GENERAL_MODELS } from "../lib/generalModels";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
@@ -515,15 +521,112 @@ async function generateGroq(
   return { ok: false, error: "network" };
 }
 
+/* ---------------- Astra (GPT-6) — OpenAI ---------------- */
+
+// "Astra (GPT-6)" in the General-model picker is OpenAI's flagship GPT-6
+// Astra model, called through OpenAI's own API (no custom base URL — the same
+// OpenAI SDK the other providers use). Keys are read from the ASTRA_* names
+// first (what the Keys/API keys panel suggests), with OPENAI_* accepted as an
+// alias. Multiple keys rotate round-robin across requests and fail over on
+// 401/429/5xx exactly like the Gemini and Groq paths.
+
+const ASTRA_MODEL = (process.env.ASTRA_MODEL ?? "").trim() || "gpt-6-astra";
+/** Fallback OpenAI models tried in order when the primary is retired/unavailable. */
+const ASTRA_MODEL_FALLBACKS = ["gpt-6-astra", "gpt-5.6"];
+/** Output budget for Astra. GPT-6 era models use `max_completion_tokens`,
+ *  so a reasoning-heavy answer isn't cut off mid-stream. */
+const ASTRA_MAX_TOKENS = Number(process.env.ASTRA_MAX_TOKENS) || 8192;
+/** Optional override for gateways that mirror OpenAI's Chat Completions API
+ *  (e.g. a proxy). Unset = talk to OpenAI directly. */
+const ASTRA_BASE_URL = (process.env.ASTRA_BASE_URL ?? "").trim() || undefined;
+
+/** All configured Astra/OpenAI API keys — ASTRA_API_KEYS (comma-separated),
+ *  numbered ASTRA_API_KEY_2..9, the primary ASTRA_API_KEY, then the same
+ *  trio under the OPENAI_* names. Deduplicated, first occurrence wins. */
+function astraApiKeys(): string[] {
+  const keys: string[] = [];
+  const add = (key: string | undefined) => {
+    const trimmed = (key ?? "").trim();
+    if (trimmed && !keys.includes(trimmed)) keys.push(trimmed);
+  };
+  for (const raw of (process.env.ASTRA_API_KEYS ?? "").split(",")) add(raw);
+  for (let i = 2; i <= 9; i++) add(process.env[`ASTRA_API_KEY_${i}`]);
+  add(process.env.ASTRA_API_KEY);
+  for (const raw of (process.env.OPENAI_API_KEYS ?? "").split(",")) add(raw);
+  for (let i = 2; i <= 9; i++) add(process.env[`OPENAI_API_KEY_${i}`]);
+  add(process.env.OPENAI_API_KEY);
+  return keys;
+}
+
+/** Starting index for round-robin rotation; advanced after every request so
+ *  consecutive calls spread across all configured Astra keys. */
+let astraCursor = 0;
+
+async function generateAstra(
+  systemPrompt: string,
+  history: ChatMessage[],
+  onDelta?: (text: string) => void | Promise<void>,
+): Promise<CompletionResult> {
+  const keys = astraApiKeys();
+  if (keys.length === 0) return { ok: false, error: "missing-key" };
+
+  const models = [ASTRA_MODEL, ...ASTRA_MODEL_FALLBACKS].filter(
+    (model, i, arr) => arr.indexOf(model) === i,
+  );
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const apiKey = keys[(astraCursor + attempt) % keys.length];
+    const client = getClient(apiKey, ASTRA_BASE_URL);
+    for (const model of models) {
+      try {
+        const stream = await client.chat.completions.create({
+          model,
+          max_completion_tokens: ASTRA_MAX_TOKENS,
+          stream: true,
+          messages: toSdkMessages(systemPrompt, history),
+        });
+        let full = "";
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            full += delta;
+            if (onDelta) await onDelta(full);
+          }
+        }
+        const content = full.trim();
+        if (!content) return { ok: false, error: "model" };
+        return { ok: true, content, model };
+      } catch (error) {
+        lastError = error;
+        console.error(`[TwinMind] Astra stream failed (${model}):`, error);
+        // Retired/unknown model — try the next one on the same key.
+        if (isModelNotFoundError(error)) continue;
+        // Key problem (401/429/5xx) — fail over to the next key.
+        if (!isRetryableError(error)) break;
+      }
+    }
+    if (!isRetryableError(lastError)) break;
+  }
+
+  astraCursor = (astraCursor + 1) % keys.length;
+  console.error(
+    "[TwinMind] Astra stream failed after trying all keys:",
+    lastError,
+  );
+  return { ok: false, error: "network" };
+}
+
 /** Generate a reply for the given mode, streaming the provider's tokens to
  *  onDelta (full text so far) as they arrive. `fast` only affects General
  *  mode — it swaps in the lighter, quicker Gemini model. Hacking mode always
- *  uses Groq and ignores it.
+ *  uses Groq and ignores both.
  *
- *  `preferredModel` is an optional General-mode model the user picked in the
- *  chat header. It's tried first; if it's retired or unavailable, the call
- *  walks the normal Gemini fallback chain automatically — so picking a model
- *  is a preference, never a hard constraint. */
+ *  `model` is the optional General-mode model the user picked in the chat
+ *  header. The "Astra (GPT-6)" pick routes to OpenAI's GPT-6 Astra with the
+ *  ASTRA_/OPENAI_ keys (falling back to Gemini when that fails); every other
+ *  pick is a Gemini preference — tried first, with the normal Gemini fallback
+ *  chain after it — so picking a model is never a hard constraint. */
 export async function generateChatCompletion(
   mode: Mode,
   history: ChatMessage[],
@@ -531,13 +634,25 @@ export async function generateChatCompletion(
   options: { fast?: boolean; model?: string } = {},
 ): Promise<CompletionResult> {
   const systemPrompt = systemPromptFor(mode);
-  return mode === MODES.HACKING
-    ? generateGroq(systemPrompt, history, onDelta)
-    : generateGemini(
-        systemPrompt,
-        history,
-        onDelta,
-        options.fast === true,
-        options.model,
-      );
+  if (mode === MODES.HACKING) {
+    return generateGroq(systemPrompt, history, onDelta);
+  }
+  if (options.model === GENERAL_MODELS["Astra (GPT-6)"]) {
+    const astra = await generateAstra(systemPrompt, history, onDelta);
+    if (astra.ok) return astra;
+    console.error(
+      `[TwinMind] Astra unavailable (${astra.error}) — falling back to Gemini.`,
+    );
+  }
+  return generateGemini(
+    systemPrompt,
+    history,
+    onDelta,
+    options.fast === true,
+    // Don't re-try the Astra model id against Gemini's endpoint after a
+    // fallback — go straight to the Gemini chain.
+    options.model === GENERAL_MODELS["Astra (GPT-6)"]
+      ? undefined
+      : options.model,
+  );
 }

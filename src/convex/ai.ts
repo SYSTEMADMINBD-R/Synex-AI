@@ -643,14 +643,15 @@ export async function generateChatCompletion(
     console.error(
       `[TwinMind] Astra unavailable (${astra.error}) — falling back to Gemini.`,
     );
-  }
-  return generateGemini(
+  }  return generateGemini(
     systemPrompt,
     history,
     onDelta,
     options.fast === true,
-    // Don't re-try the Astra model id against Gemini's endpoint after a
-    // fallback — go straight to the Gemini chain.
-    options.model === "gpt-6-astra" ? undefined : options.model,
+    // Fast mode wins over the pinned pick — the lite model is the whole point
+    // of the Fast toggle (the picker choice applies when Fast is off).
+    options.fast === true || options.model === "gpt-6-astra"
+      ? undefined
+      : options.model,
   );
 }

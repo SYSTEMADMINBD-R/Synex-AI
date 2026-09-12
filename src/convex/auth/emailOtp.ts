@@ -22,7 +22,7 @@ export const emailOtp = Email({
         {
           to: email,
           otp: token,
-          appName: "TwinMind",
+          appName: "XIREVO",
         },
         {
           headers: {

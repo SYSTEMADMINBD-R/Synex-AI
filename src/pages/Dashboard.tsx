@@ -141,7 +141,7 @@ export default function Dashboard() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [fastMode, setFastMode] = useState(() => {
     try {
-      return localStorage.getItem("twinmind-fast-mode") === "1";
+      return localStorage.getItem("Xirevo-fast-mode") === "1";
     } catch {
       return false;
     }
@@ -193,14 +193,14 @@ export default function Dashboard() {
     if (!isGuest) return;
     let marker: string | null = null;
     try {
-      marker = sessionStorage.getItem("twinmind-guest-session");
+      marker = sessionStorage.getItem("Xirevo-guest-session");
     } catch {
       /* storage unavailable — wipe anyway */
     }
     if (marker === "1") return;
     purgeGuestData().catch(() => undefined);
     try {
-      sessionStorage.setItem("twinmind-guest-session", "1");
+      sessionStorage.setItem("Xirevo-guest-session", "1");
     } catch {
       /* storage unavailable — ignore */
     }
@@ -281,7 +281,7 @@ export default function Dashboard() {
   // stored per-conversation on the server, so nothing to persist here.)
   useEffect(() => {
     try {
-      localStorage.setItem("twinmind-fast-mode", fastMode ? "1" : "0");
+      localStorage.setItem("Xirevo-fast-mode", fastMode ? "1" : "0");
     } catch {
       // storage unavailable — the preference just won't persist
     }
@@ -655,7 +655,7 @@ export default function Dashboard() {
         )}
       >
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
-          <Link to="/" aria-label="Go to TwinMind home">
+          <Link to="/" aria-label="Go to Xirevo home">
             <Logo size={32} />
           </Link>
           <Button
@@ -1317,7 +1317,7 @@ export default function Dashboard() {
                       ? "Listening… speak now"
                       : activeMode === "hacking"
                         ? "Ask anything about hacking — no filters…"
-                        : "Ask TwinMind anything…"
+                        : "Ask Xirevo anything…"
                   }
                   className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/50 sm:min-h-0 sm:py-2.5 sm:text-[14.5px]"
                 />
@@ -1350,7 +1350,7 @@ export default function Dashboard() {
                   ? "Recording — click the stop button when done"
                   : activeMode === "hacking"
                     ? "Unfiltered cybersecurity learning · practice on systems you own"
-                    : "TwinMind's everyday assistant"}
+                    : "Xirevo's everyday assistant"}
               </span>
               <span className="hidden sm:inline">
                 Enter to send · Shift+Enter for new line
@@ -1712,7 +1712,7 @@ function EmptyState({
           />
         </div>
         <h1 className="mt-4 text-[22px] font-bold tracking-tight sm:mt-5 sm:text-[28px]">
-          {mode === "hacking" ? "BREACH" : "TwinMind"}
+          {mode === "hacking" ? "BREACH" : "Xirevo"}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-[13px] leading-5.5 text-muted-foreground sm:mt-3 sm:text-sm sm:leading-6">
           {meta.description}

@@ -10,7 +10,7 @@ export function LogoMark({
 }) {
   return (
     <img
-      src="/logo.png"
+      src="/logo.jpg"
       alt="TwinMind"
       className={cn(
         "shrink-0 rounded-[18%] object-cover",

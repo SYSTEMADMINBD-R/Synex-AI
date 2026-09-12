@@ -128,7 +128,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             type="button"
             onClick={() => navigate("/")}
             className="mb-6 cursor-pointer"
-            aria-label="Go to TwinMind home"
+            aria-label="Go to XIREVO home"
           >
             <Logo size={52} />
           </button>

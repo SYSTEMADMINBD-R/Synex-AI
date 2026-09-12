@@ -24,7 +24,7 @@ export default function NotFound() {
       {/* Top bar */}
       <header className="relative z-10 border-b border-border/50 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link to={homeHref} aria-label="TwinMind home">
+          <Link to={homeHref} aria-label="XIREVO home">
             <Logo size={32} />
           </Link>
           <Button

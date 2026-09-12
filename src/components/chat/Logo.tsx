@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** TwinMind brand mark — the official logo image. */
+/** Xirevo brand mark — the official logo image. */
 export function LogoMark({
   size = 36,
   className,

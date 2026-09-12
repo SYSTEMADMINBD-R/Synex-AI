@@ -11,7 +11,7 @@ export function LogoMark({
   return (
     <img
       src="/logo.jpg"
-      alt="TwinMind"
+      alt="Xirevo"
       className={cn(
         "shrink-0 rounded-[18%] object-cover",
         className,
@@ -36,7 +36,7 @@ export function Logo({
       <LogoMark size={size} />
       {showWordmark && (
         <span className="text-[17px] font-bold tracking-tight text-foreground">
-          Twin<span className="text-[var(--mode-hacking)]">Mind</span>
+          Xir<span className="text-[var(--mode-hacking)]">evo</span>
         </span>
       )}
     </div>

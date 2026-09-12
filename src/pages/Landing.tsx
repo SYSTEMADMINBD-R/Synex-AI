@@ -23,7 +23,7 @@ const DEMO: Record<
   general: {
     question: "Explain DNS like I'm five",
     answer:
-      "DNS is the internet's phonebook. You type twinmind.app, and DNS looks up the matching IP address — just like finding a contact's number by name. No directory, no connection.",
+      "DNS is the internet's phonebook. You type XIREVO.app, and DNS looks up the matching IP address — just like finding a contact's number by name. No directory, no connection.",
   },
   hacking: {
     question: "How does SQL injection work?",
@@ -167,7 +167,7 @@ export default function Landing() {
               variants={fadeUp}
               className="mt-6 max-w-md text-[16.5px] leading-8 text-muted-foreground"
             >
-              TwinMind pairs a sharp everyday assistant with{" "}
+              XIREVO pairs a sharp everyday assistant with{" "}
               <span className="font-semibold text-foreground">
                 BREACH
               </span>{" "}
@@ -375,7 +375,7 @@ export default function Landing() {
                 </div>
               </div>
               <p className="mt-5 text-[14.5px] leading-7 text-muted-foreground">
-                The everyday half of TwinMind — a sharp, conversational
+                The everyday half of XIREVO — a sharp, conversational
                 assistant for studying, writing, planning, and curious
                 questions. Same conversation, same memory, different mind.
               </p>
@@ -471,7 +471,7 @@ export default function Landing() {
                     size="lg"
                     className="cursor-pointer rounded-full bg-[var(--mode-hacking)] px-8 font-semibold text-background shadow-[0_12px_32px_-10px_rgba(52,211,153,0.8)] transition-all hover:brightness-110"
                   >
-                    Launch TwinMind
+                    Launch XIREVO
                     <ArrowRight className="size-4" />
                   </Button>
                 </Link>
@@ -513,7 +513,7 @@ export default function Landing() {
                 </span>
               </h2>
               <p className="mx-auto mt-3 max-w-md text-[14px] leading-7 text-muted-foreground">
-                Owner &amp; developer of TwinMind. If you ever ask either mind
+                Owner &amp; developer of XIREVO. If you ever ask either mind
                 who built it, they'll tell you the same name.
               </p>
             </div>
@@ -526,7 +526,7 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 sm:flex-row">
           <Logo size={26} />
           <p className="text-xs text-muted-foreground/70">
-            © {new Date().getFullYear()} TwinMind · Made and developed by{" "}
+            © {new Date().getFullYear()} XIREVO · Made and developed by{" "}
             <span className="font-semibold text-foreground/80">RAGIB</span>
           </p>
         </div>
@@ -554,7 +554,7 @@ function DemoCard() {
         </div>
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <Icon className="size-3.5" style={{ color: meta.accent }} />
-          TwinMind — {meta.label} mind
+          XIREVO — {meta.label} mind
         </div>
         <span className="w-8" />
       </div>

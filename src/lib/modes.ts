@@ -20,7 +20,7 @@ export const MODE_META: Record<
     accent: "#38bdf8",
     icon: Sparkles,
     description:
-      "TwinMind's everyday mind — clear answers on any topic, from homework to life planning.",
+      "XIREVO's everyday mind — clear answers on any topic, from homework to life planning.",
   },
   hacking: {
     label: "Hacking",

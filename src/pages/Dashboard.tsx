@@ -1319,7 +1319,7 @@ export default function Dashboard() {
                         ? "Ask anything about hacking — no filters…"
                         : "Ask Xirevo anything…"
                   }
-                  className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/50 sm:min-h-0 sm:py-2.5 sm:text-[14.5px]"
+                  className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-base ...
                 />
                 <Button
                   type="button"

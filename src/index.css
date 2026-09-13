@@ -44,7 +44,7 @@
     "Cascadia Mono", Consolas, monospace;
 }
 
-/* TwinMind — Modern dark theme. The app is dark-first: these tokens are the
+/* Xirevo — Modern dark theme. The app is dark-first: these tokens are the
    active palette, and .dark mirrors them in case the class is toggled. */
 :root {
   color-scheme: dark;
@@ -81,7 +81,7 @@
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.792 0.189 162.83);
 
-  /* TwinMind mode accents */
+  /* Xirevo mode accents */
   --mode-general: #38bdf8;
   --mode-hacking: #34d399;
 }
@@ -119,9 +119,36 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Mobile viewport height: older iOS versions without dvh support fall
+       back to -webkit-fill-available so the app shell never overflows. */
+    height: -webkit-fill-available;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* 100vh first (fallback), 100dvh second (wins where supported) so the
+       mobile browser toolbar never covers the composer. */
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* Installed-PWA / mobile-web hygiene: no pull-to-refresh or rubber-band
+       on the page (inner chat scroller still scrolls), no gray flash boxes
+       on taps, no long-press callout over UI chrome. */
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  /* Touch devices: keep every text input at >=16px so iOS Safari never
+     auto-zooms the page when focusing the composer or PIN inputs. Utility
+     classes (e.g. sm:text-[14.5px]) still override this on larger screens. */
+  input,
+  textarea {
+    font-size: 16px;
+  }
+  button,
+  [role="button"] {
+    /* Kill the legacy tap delay and double-tap-zoom on rapid taps. */
+    touch-action: manipulation;
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
@@ -156,3 +183,5 @@
     0 1px 0 0 oklch(1 0 0 / 6%) inset,
     0 20px 50px -24px oklch(0 0 0 / 0.6);
 }
+ 
+  
